@@ -1,0 +1,245 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v2
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v4
+      with:
+        images: |
+          ${{ secrets.DOCKER_USERNAME }}/milk-company
+          ghcr.io/${{ github.repository }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha,prefix={{branch}}-
+
+    - name: Build and push frontend image
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        file: ./Dockerfile.frontend
+        push: true
+        tags: |
+          ${{ secrets.DOCKER_USERNAME }}/milk-company-frontend:latest
+          ${{ secrets.DOCKER_USERNAME }}/milk-company-frontend:${{ github.sha }}
+          ghcr.io/${{ github.repository }}-frontend:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Build and push backend image
+      uses: docker/build-push-action@v4
+      with:
+        context: ./api
+        file: ./api/Dockerfile
+        push: true
+        tags: |
+          ${{ secrets.DOCKER_USERNAME }}/milk-company-backend:latest
+          ${{ secrets.DOCKER_USERNAME }}/milk-company-backend:${{ github.sha }}
+          ghcr.io/${{ github.repository }}-backend:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  deploy-to-aws:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.environment || 'production' }}
+      url: ${{ steps.deploy.outputs.url }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Deploy to ECS
+      id: deploy
+      run: |
+        # Update ECS task definition with new image
+        aws ecs update-service \
+          --cluster ${{ secrets.ECS_CLUSTER }} \
+          --service ${{ secrets.ECS_SERVICE }} \
+          --force-new-deployment
+
+        # Wait for deployment to complete
+        aws ecs wait services-stable \
+          --cluster ${{ secrets.ECS_CLUSTER }} \
+          --services ${{ secrets.ECS_SERVICE }}
+
+        # Get the load balancer URL
+        LB_URL=$(aws ecs describe-services \
+          --cluster ${{ secrets.ECS_CLUSTER }} \
+          --services ${{ secrets.ECS_SERVICE }} \
+          --query 'services[0].loadBalancers[0].targetGroupArn' \
+          --output text | xargs -I {} aws elbv2 describe-target-groups \
+          --target-group-arns {} \
+          --query 'TargetGroups[0].LoadBalancerArns[0]' \
+          --output text | xargs -I {} aws elbv2 describe-load-balancers \
+          --load-balancer-arns {} \
+          --query 'LoadBalancers[0].DNSName' \
+          --output text)
+
+        echo "url=http://$LB_URL" >> $GITHUB_OUTPUT
+
+    - name: Update CloudFront distribution
+      run: |
+        aws cloudfront create-invalidation \
+          --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+          --paths "/*"
+
+  deploy-to-vercel:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.event.inputs.environment == 'staging' || github.ref == 'refs/heads/develop'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Deploy to Vercel
+      uses: amondnet/vercel-action@v25
+      with:
+        vercel-token: ${{ secrets.VERCEL_TOKEN }}
+        vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+        vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+        vercel-args: '--prod'
+
+  deploy-to-railway:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.event.inputs.environment == 'production'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Deploy to Railway
+      uses: berviantoleo/railway-deploy@main
+      with:
+        railway_token: ${{ secrets.RAILWAY_TOKEN }}
+        service: milk-company
+
+  health-check:
+    needs: [deploy-to-aws]
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Wait for deployment
+      run: sleep 30
+
+    - name: Health check
+      run: |
+        for i in {1..10}; do
+          response=$(curl -s -o /dev/null -w "%{http_code}" ${{ secrets.PRODUCTION_URL }}/api)
+          if [ $response -eq 200 ]; then
+            echo "Health check passed!"
+            exit 0
+          fi
+          echo "Attempt $i failed with status code $response. Retrying..."
+          sleep 10
+        done
+        echo "Health check failed after 10 attempts"
+        exit 1
+
+    - name: Run smoke tests
+      run: |
+        # Basic API smoke tests
+        curl -f ${{ secrets.PRODUCTION_URL }}/api || exit 1
+        curl -f ${{ secrets.PRODUCTION_URL }}/api/health || exit 1
+
+    - name: Notify deployment status
+      if: always()
+      uses: 8398a7/action-slack@v3
+      with:
+        status: ${{ job.status }}
+        text: |
+          Deployment to ${{ github.event.inputs.environment || 'production' }} ${{ job.status }}
+          Commit: ${{ github.sha }}
+          Author: ${{ github.actor }}
+          URL: ${{ secrets.PRODUCTION_URL }}
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+  rollback:
+    needs: health-check
+    if: failure()
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Rollback ECS deployment
+      run: |
+        # Get previous task definition
+        PREVIOUS_TASK_DEF=$(aws ecs describe-services \
+          --cluster ${{ secrets.ECS_CLUSTER }} \
+          --services ${{ secrets.ECS_SERVICE }} \
+          --query 'services[0].deployments[1].taskDefinition' \
+          --output text)
+
+        # Update service with previous task definition
+        aws ecs update-service \
+          --cluster ${{ secrets.ECS_CLUSTER }} \
+          --service ${{ secrets.ECS_SERVICE }} \
+          --task-definition $PREVIOUS_TASK_DEF
+
+    - name: Notify rollback
+      uses: 8398a7/action-slack@v3
+      with:
+        status: custom
+        custom_payload: |
+          {
+            text: "⚠️ Deployment rolled back due to health check failure",
+            color: "warning"
+          }
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}

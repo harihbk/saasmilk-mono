@@ -1,0 +1,120 @@
+name: Deploy to Server via SSH
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+
+    - name: Build frontend
+      run: |
+        npm ci
+        npm run build
+
+    - name: Build backend
+      working-directory: ./api
+      run: npm ci
+
+    - name: Deploy to server via SSH
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USERNAME }}
+        password: ${{ secrets.SERVER_PASSWORD }}
+        port: ${{ secrets.SERVER_PORT || 22 }}
+        script: |
+          # Create app directory if not exists
+          mkdir -p /home/${{ secrets.SERVER_USERNAME }}/milk-company
+          cd /home/${{ secrets.SERVER_USERNAME }}/milk-company
+
+          # Stop existing services
+          docker-compose down || true
+          pm2 stop all || true
+
+          # Pull latest code
+          if [ -d ".git" ]; then
+            git pull origin main
+          else
+            git clone https://github.com/${{ github.repository }}.git .
+          fi
+
+          # Copy environment files
+          echo "Creating environment files..."
+          cat > .env << EOF
+          NODE_ENV=production
+          PORT=8000
+          MONGODB_URI=${{ secrets.MONGODB_URI }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          SAAS_ADMIN_EMAIL=${{ secrets.SAAS_ADMIN_EMAIL }}
+          SAAS_ADMIN_PASSWORD=${{ secrets.SAAS_ADMIN_PASSWORD }}
+          EOF
+
+          # Deploy with Docker Compose
+          docker-compose -f docker-compose.yml up -d --build
+
+          # Or deploy with PM2 (alternative)
+          # npm install
+          # cd api && npm install && cd ..
+          # pm2 start ecosystem.config.js --env production
+
+    - name: Copy files via SCP (Alternative method)
+      uses: appleboy/scp-action@v0.1.5
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USERNAME }}
+        password: ${{ secrets.SERVER_PASSWORD }}
+        port: ${{ secrets.SERVER_PORT || 22 }}
+        source: "build/,api/,package*.json,docker-compose.yml,nginx.conf"
+        target: "/home/${{ secrets.SERVER_USERNAME }}/milk-company"
+        strip_components: 0
+
+    - name: Execute deployment commands
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USERNAME }}
+        password: ${{ secrets.SERVER_PASSWORD }}
+        port: ${{ secrets.SERVER_PORT || 22 }}
+        script: |
+          cd /home/${{ secrets.SERVER_USERNAME }}/milk-company
+
+          # Option 1: Deploy with Docker
+          docker-compose pull
+          docker-compose up -d --force-recreate
+
+          # Option 2: Deploy with PM2 (Node.js)
+          # npm install --production
+          # cd api && npm install --production && cd ..
+          # pm2 restart ecosystem.config.js --update-env
+
+          # Option 3: Deploy with systemd service
+          # sudo systemctl restart milk-company-backend
+          # sudo systemctl restart milk-company-frontend
+
+          # Verify deployment
+          docker ps | grep milk-company
+          curl -f http://localhost:8000/api || exit 1
+
+    - name: Health check
+      run: |
+        sleep 30
+        response=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.SERVER_HOST }}/api)
+        if [ $response -eq 200 ]; then
+          echo "Deployment successful!"
+        else
+          echo "Health check failed with status code $response"
+          exit 1
+        fi
