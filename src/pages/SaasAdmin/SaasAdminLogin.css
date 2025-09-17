@@ -1,0 +1,115 @@
+.saas-admin-login-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.saas-admin-login-content {
+  width: 100%;
+  max-width: 400px;
+}
+
+.saas-admin-login-card {
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  border: none;
+  overflow: hidden;
+}
+
+.saas-admin-login-header {
+  text-align: center;
+  margin-bottom: 32px;
+  padding: 20px 0;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  margin: -24px -24px 32px -24px;
+  padding: 40px 24px 30px;
+}
+
+.saas-admin-icon {
+  font-size: 48px;
+  color: #667eea;
+  margin-bottom: 16px;
+  display: block;
+}
+
+.saas-admin-title {
+  margin: 0 !important;
+  color: #2c3e50;
+  font-weight: 700;
+}
+
+.saas-admin-subtitle {
+  font-size: 14px;
+  color: #7f8c8d;
+  margin-top: 8px;
+  display: block;
+}
+
+.saas-admin-login-button {
+  height: 48px;
+  font-size: 16px;
+  font-weight: 600;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+  transition: all 0.3s ease;
+}
+
+.saas-admin-login-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+.saas-admin-login-footer {
+  text-align: center;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.ant-form-item-label > label {
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.ant-input-affix-wrapper {
+  border-radius: 8px;
+  border: 2px solid #e1e8ed;
+  transition: all 0.3s ease;
+}
+
+.ant-input-affix-wrapper:focus,
+.ant-input-affix-wrapper-focused {
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+}
+
+.ant-input {
+  font-size: 14px;
+}
+
+.ant-input-prefix {
+  color: #8c9eff;
+}
+
+@media (max-width: 480px) {
+  .saas-admin-login-container {
+    padding: 10px;
+  }
+  
+  .saas-admin-login-header {
+    padding: 30px 20px 25px;
+  }
+  
+  .saas-admin-icon {
+    font-size: 40px;
+  }
+  
+  .saas-admin-title {
+    font-size: 20px !important;
+  }
+}

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Auth</title>
+</head>
+<body>
+    <h1>API Test</h1>
+    <button onclick="testAuth()">Test Authentication</button>
+    <button onclick="testDealers()">Test Dealers API</button>
+    <button onclick="testOrders()">Test Orders API</button>
+    <div id="results"></div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api';
+        const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4OGNhYzY3YTdjMThlNThhMDliMmUxNSIsInJvbGUiOiJhZG1pbiIsImlhdCI6MTc1NDEyMzIwNywiZXhwIjoxNzU0MjA5NjA3fQ.hxQzDVICia2S1T-alipNbDNgdOGbpJZI3qyEjYzCE7A';
+
+        function log(message) {
+            const results = document.getElementById('results');
+            results.innerHTML += '<p>' + JSON.stringify(message, null, 2) + '</p>';
+        }
+
+        async function testAuth() {
+            try {
+                const response = await fetch(API_BASE + '/auth/me', {
+                    headers: {
+                        'Authorization': 'Bearer ' + token,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const data = await response.json();
+                log('Auth test: ' + JSON.stringify(data));
+            } catch (error) {
+                log('Auth error: ' + error.message);
+            }
+        }
+
+        async function testDealers() {
+            try {
+                const response = await fetch(API_BASE + '/dealers?limit=10&status=active', {
+                    headers: {
+                        'Authorization': 'Bearer ' + token,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const data = await response.json();
+                log('Dealers test: Found ' + (data.data?.dealers?.length || 0) + ' dealers');
+                log(data);
+            } catch (error) {
+                log('Dealers error: ' + error.message);
+            }
+        }
+
+        async function testOrders() {
+            try {
+                const dealerId = '688cc299ff86e6ff97e220bc';
+                const response = await fetch(API_BASE + '/orders?dealer=' + dealerId + '&limit=10', {
+                    headers: {
+                        'Authorization': 'Bearer ' + token,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const data = await response.json();
+                log('Orders test: Found ' + (data.data?.orders?.length || 0) + ' orders');
+                log(data);
+            } catch (error) {
+                log('Orders error: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Quick Login Test</title>
+</head>
+<body>
+    <h1>Quick Login Test</h1>
+    <button onclick="setLoginCredentials()">Set Test Login Credentials</button>
+    <button onclick="clearCredentials()">Clear Credentials</button>
+    <button onclick="checkCredentials()">Check Current Credentials</button>
+    
+    <div id="status"></div>
+    
+    <script>
+        function setLoginCredentials() {
+            // Set the test user credentials we created
+            localStorage.setItem('token', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4YTYwNDFkZTA1NzkyYjUwYTIyOGRkZiIsImlhdCI6MTc1NTcxMDUwNCwiZXhwIjoxNzU2MzE1MzA0fQ.LpE0YQIOXdkTIW1SylLmjSeYRTFT3VbusAN_JJ4KcmE');
+            localStorage.setItem('tenantId', '002');
+            localStorage.setItem('user', JSON.stringify({
+                id: "68a6041de05792b50a228ddf",
+                name: "Test Procurement User",
+                email: "procurement@test.com",
+                role: "admin",
+                tenantId: "002"
+            }));
+            document.getElementById('status').innerHTML = '<p style="color: green;">Credentials set! Now go to http://localhost:3000/procurement/create</p>';
+        }
+        
+        function clearCredentials() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('tenantId');
+            localStorage.removeItem('user');
+            document.getElementById('status').innerHTML = '<p style="color: red;">Credentials cleared!</p>';
+        }
+        
+        function checkCredentials() {
+            const token = localStorage.getItem('token');
+            const tenantId = localStorage.getItem('tenantId');
+            const user = localStorage.getItem('user');
+            
+            document.getElementById('status').innerHTML = `
+                <div>
+                    <p><strong>Token:</strong> ${token ? 'Present' : 'Missing'}</p>
+                    <p><strong>Tenant ID:</strong> ${tenantId || 'Missing'}</p>
+                    <p><strong>User:</strong> ${user ? 'Present' : 'Missing'}</p>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>

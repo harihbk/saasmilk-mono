@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test SaaS Admin Update</title>
+</head>
+<body>
+    <h1>Test SaaS Admin Tenant Update</h1>
+
+    <button onclick="testUpdate()">Test Update without x-tenant-id</button>
+    <button onclick="testUpdateWithTenant()">Test Update with x-tenant-id</button>
+
+    <div id="result"></div>
+
+    <script>
+        async function testUpdate() {
+            const token = localStorage.getItem('saas_admin_token');
+            if (!token) {
+                document.getElementById('result').innerHTML = 'No SaaS admin token found. Please login first.';
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:8000/api/saas-admin/tenants/674b949f6f7b4b99d0c8f123', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        name: 'Test Company Updated ' + new Date().toISOString()
+                    })
+                });
+
+                const data = await response.json();
+                document.getElementById('result').innerHTML = `
+                    <h3>Response without x-tenant-id:</h3>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                document.getElementById('result').innerHTML = `Error: ${error.message}`;
+            }
+        }
+
+        async function testUpdateWithTenant() {
+            const token = localStorage.getItem('saas_admin_token');
+            const tenantId = localStorage.getItem('tenantId');
+
+            if (!token) {
+                document.getElementById('result').innerHTML = 'No SaaS admin token found. Please login first.';
+                return;
+            }
+
+            try {
+                const headers = {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                };
+
+                if (tenantId) {
+                    headers['x-tenant-id'] = tenantId;
+                }
+
+                const response = await fetch('http://localhost:8000/api/saas-admin/tenants/674b949f6f7b4b99d0c8f123', {
+                    method: 'PUT',
+                    headers: headers,
+                    body: JSON.stringify({
+                        name: 'Test Company With Tenant ' + new Date().toISOString()
+                    })
+                });
+
+                const data = await response.json();
+                document.getElementById('result').innerHTML = `
+                    <h3>Response with x-tenant-id (${tenantId || 'none'}):</h3>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                document.getElementById('result').innerHTML = `Error: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

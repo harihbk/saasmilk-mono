@@ -1,0 +1,190 @@
+.saas-admin-sider {
+  box-shadow: 2px 0 8px 0 rgba(29, 35, 41, 0.05);
+  z-index: 10;
+}
+
+.saas-admin-logo {
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  margin-bottom: 1px;
+}
+
+.saas-admin-logo-icon {
+  font-size: 32px;
+  color: #fff;
+  margin-right: 12px;
+}
+
+.saas-admin-logo-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.saas-admin-menu {
+  border-right: none;
+  background: #001529;
+}
+
+.saas-admin-menu .ant-menu-item {
+  margin: 4px 8px;
+  border-radius: 6px;
+  height: 48px;
+  line-height: 48px;
+  display: flex;
+  align-items: center;
+}
+
+.saas-admin-menu .ant-menu-item:hover {
+  background: rgba(102, 126, 234, 0.1);
+  color: #8c9eff;
+}
+
+.saas-admin-menu .ant-menu-item-selected {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+}
+
+.saas-admin-menu .ant-menu-submenu-title {
+  margin: 4px 8px;
+  border-radius: 6px;
+  height: 48px;
+  line-height: 48px;
+}
+
+.saas-admin-menu .ant-menu-submenu-title:hover {
+  background: rgba(102, 126, 234, 0.1);
+  color: #8c9eff;
+}
+
+.saas-admin-header {
+  padding: 0 24px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 72px;
+  z-index: 9;
+}
+
+.saas-admin-header-left {
+  display: flex;
+  align-items: center;
+}
+
+.saas-admin-collapse-btn {
+  font-size: 18px;
+  width: 48px;
+  height: 48px;
+  color: #667eea;
+  margin-right: 16px;
+}
+
+.saas-admin-collapse-btn:hover {
+  background: rgba(102, 126, 234, 0.1);
+  color: #667eea;
+}
+
+.saas-admin-breadcrumb {
+  margin-left: 16px;
+}
+
+.saas-admin-notification-btn {
+  font-size: 18px;
+  width: 40px;
+  height: 40px;
+  color: #667eea;
+  border-radius: 50%;
+}
+
+.saas-admin-notification-btn:hover {
+  background: rgba(102, 126, 234, 0.1);
+  color: #667eea;
+}
+
+.saas-admin-profile {
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.saas-admin-profile:hover {
+  background: rgba(102, 126, 234, 0.05);
+}
+
+.saas-admin-content {
+  margin: 24px;
+  padding: 32px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  min-height: calc(100vh - 144px);
+}
+
+/* Dark theme customizations */
+.saas-admin-sider .ant-menu-dark {
+  background: #001529;
+}
+
+.saas-admin-sider .ant-menu-dark .ant-menu-item-selected {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.saas-admin-sider .ant-menu-dark .ant-menu-submenu-selected > .ant-menu-submenu-title {
+  color: #8c9eff;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .saas-admin-header {
+    padding: 0 16px;
+  }
+  
+  .saas-admin-content {
+    margin: 16px;
+    padding: 24px;
+  }
+  
+  .saas-admin-breadcrumb {
+    display: none;
+  }
+  
+  .saas-admin-profile div {
+    display: none;
+  }
+}
+
+@media (max-width: 576px) {
+  .saas-admin-content {
+    margin: 8px;
+    padding: 16px;
+    border-radius: 8px;
+  }
+}
+
+/* Custom scrollbar for sidebar */
+.saas-admin-sider .ant-layout-sider-children {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.saas-admin-sider .ant-layout-sider-children::-webkit-scrollbar {
+  width: 6px;
+}
+
+.saas-admin-sider .ant-layout-sider-children::-webkit-scrollbar-track {
+  background: #001529;
+}
+
+.saas-admin-sider .ant-layout-sider-children::-webkit-scrollbar-thumb {
+  background: #667eea;
+  border-radius: 3px;
+}
+
+.saas-admin-sider .ant-layout-sider-children::-webkit-scrollbar-thumb:hover {
+  background: #8c9eff;
+}
