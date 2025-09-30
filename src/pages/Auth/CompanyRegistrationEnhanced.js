@@ -51,7 +51,7 @@ const CompanyRegistrationEnhanced = () => {
   const fetchNextTenantId = async () => {
     try {
       setLoadingTenantId(true);
-      const response = await axios.get(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/companies/next-tenant-id`);
+      const response = await axios.get(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/companies/next-tenant-id`);
       if (response.data.success) {
         setNextTenantId(response.data.data.nextTenantId);
       }
@@ -95,8 +95,8 @@ const CompanyRegistrationEnhanced = () => {
         password: requestData.password ? '[PROVIDED]' : '[MISSING]'
       });
 
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-      const endpoint = `${apiUrl}/api/companies/register`;
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+      const endpoint = `${apiUrl}/companies/register`;
       
       console.log('Making request to:', endpoint);
       
@@ -119,7 +119,7 @@ const CompanyRegistrationEnhanced = () => {
   };
 
   const handleLoginRedirect = () => {
-    navigate('/tenant');
+    navigate('tenant');
   };
 
   const steps = [

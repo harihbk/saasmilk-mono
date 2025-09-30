@@ -33,6 +33,8 @@ const Login = () => {
     
     try {
       await login(values.email, values.password);
+
+     
       // Navigation will be handled by the auth context
     } catch (error) {
       setError(error.message);
@@ -132,25 +134,8 @@ const Login = () => {
             </Form.Item>
           </Form>
 
-          <Divider>
-            <Text type="secondary">Demo Accounts</Text>
-          </Divider>
-
-          <Space direction="vertical" style={{ width: '100%' }} size="small">
-            <div className="demo-account">
-              <Text strong>Admin:</Text>
-              <Text code>admin@milkcompany.com / admin123</Text>
-            </div>
-            <div className="demo-account">
-              <Text strong>Manager:</Text>
-              <Text code>manager@milkcompany.com / manager123</Text>
-            </div>
-            <div className="demo-account">
-              <Text strong>Employee:</Text>
-              <Text code>employee@milkcompany.com / employee123</Text>
-            </div>
-          </Space>
-
+       
+        
           <Divider />
 
           <div className="auth-footer" style={{ textAlign: 'center' }}>

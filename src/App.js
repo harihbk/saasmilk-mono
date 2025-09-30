@@ -53,11 +53,11 @@ const ProtectedRoute = ({ children }) => {
 
 const PublicRoute = ({ children }) => {
   const { user, loading } = useAuth();
-  
+
   if (loading) {
     return <div>Loading...</div>;
   }
-  
+
   return user ? <Navigate to="/dashboard" /> : children;
 };
 
@@ -94,8 +94,8 @@ function AppRoutes() {
           <Layout />
         </ProtectedRoute>
       }>
-        <Route index element={<Navigate to="/dashboard" />} />
-        <Route path="dashboard" element={<Dashboard />} />
+  <Route index element={<Navigate to="/dashboard" replace />} />
+  <Route path="dashboard" element={<Dashboard />} />
         <Route path="products" element={<Products />} />
         <Route path="orders" element={<Orders />} />
         <Route path="customers" element={<Customers />} />
@@ -144,7 +144,7 @@ function App() {
   return (
     <ConfigProvider theme={theme}>
       <AuthProvider>
-        <Router>
+        <Router basename='/milk'>
           <div className="App">
             <AppRoutes />
           </div>

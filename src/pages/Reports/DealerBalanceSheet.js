@@ -76,7 +76,7 @@ const DealerBalanceSheet = () => {
     try {
       console.log('=== FETCH DEALERS START ===');
       console.log('Local storage token:', localStorage.getItem('token'));
-      console.log('API base URL:', 'http://localhost:8000/api');
+      console.log('API base URL:', process.env.REACT_APP_API_URL || 'http://localhost:8000/api');
       
       const response = await dealersAPI.getDealers({ limit: 1000, status: 'active' });
       console.log('=== DEALERS API RESPONSE ===');

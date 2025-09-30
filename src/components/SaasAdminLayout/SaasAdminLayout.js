@@ -54,12 +54,12 @@ const SaasAdminLayout = () => {
     {
       key: '/saas-admin/tenants',
       icon: <GlobalOutlined />,
-      label: 'Tenant Management',
+      label: 'SaaS Tenants (Full Control)',
     },
     {
       key: '/saas-admin/companies',
       icon: <ShopOutlined />,
-      label: 'Companies',
+      label: 'Company Registrations',
     },
     {
       key: '/saas-admin/billing',

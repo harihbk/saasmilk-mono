@@ -49,7 +49,7 @@ const SaasAdminDashboard = () => {
       // Check if user is authenticated
       const token = localStorage.getItem('saas_admin_token');
       if (!token) {
-        window.location.href = '/saas-admin/login';
+        window.location.href = '/milk/saas-admin/login';
         return;
       }
 
@@ -71,7 +71,7 @@ const SaasAdminDashboard = () => {
       if (error.response?.status === 401) {
         localStorage.removeItem('saas_admin_token');
         localStorage.removeItem('saas_admin_user');
-        window.location.href = '/saas-admin/login';
+        window.location.href = '/milk/saas-admin/login';
       }
     } finally {
       setLoading(false);

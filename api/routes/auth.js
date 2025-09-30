@@ -133,13 +133,14 @@ router.post('/login', [
           { name: username, tenantId: tenantId.toUpperCase() }
         ]
       }).select('+password').populate('company');
-      
+      console.log(1)
       if (!user) {
         return res.status(401).json({
           success: false,
           message: 'Invalid credentials or tenant not found'
         });
       }
+      console.log(2)
 
       // Verify user belongs to the tenant
       if (user.tenantId !== tenantId.toUpperCase()) {
@@ -148,6 +149,7 @@ router.post('/login', [
           message: 'User does not belong to this tenant'
         });
       }
+      console.log(3)
 
       // Check if company is active and not suspended
       if (user.company && (user.company.isSuspended || !user.company.isActive)) {
@@ -156,8 +158,11 @@ router.post('/login', [
           message: 'Company account is suspended or inactive'
         });
       }
+      console.log(4)
 
     } else if (email) {
+      console.log(5)
+
       // Email-based login (super admin or general login)
       user = await User.findOne({ email }).select('+password').populate('company');
       if (!user) {
@@ -170,11 +175,14 @@ router.post('/login', [
 
     // Check if user is active
     if (!user.isActive) {
+      console.log(6)
+
       return res.status(401).json({
         success: false,
         message: 'Account is deactivated. Please contact support.'
       });
     }
+    console.log(7)
 
     // Check password
     const isMatch = await user.comparePassword(password);
@@ -184,12 +192,15 @@ router.post('/login', [
         message: 'Invalid credentials'
       });
     }
+    console.log(8)
 
     // Generate token
     const token = generateToken(user._id);
+    console.log(9)
 
     // Update last login
     await user.updateLastLogin();
+    console.log(10)
 
     res.json({
       success: true,

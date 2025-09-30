@@ -1778,7 +1778,7 @@ const Orders = () => {
                           const productPricing = getProductPrice(product._id);
                           return (
                             <Option key={product._id} value={product._id}>
-                              {product.name} - ₹{productPricing.price.toFixed(2)}
+                              {product.name} - ₹{productPricing?.price?.toFixed(2)}
                               {productPricing.hasCustomPricing && ' (Spl)'}
                             </Option>
                           );

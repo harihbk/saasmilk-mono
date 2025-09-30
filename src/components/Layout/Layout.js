@@ -214,7 +214,7 @@ const Layout = () => {
 
   const handleProfileMenuClick = ({ key }) => {
     if (key === 'profile') {
-      navigate('/profile');
+      navigate('profile');
     } else if (key === 'logout') {
       logout();
     }

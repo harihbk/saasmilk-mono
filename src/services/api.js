@@ -1,12 +1,17 @@
 import axios from 'axios';
 
+// API base URL is now configured via environment variable
 const api = axios.create({
-  baseURL: 'http://localhost:8000/api',
+  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:8000/api',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
+
+
+
+
 
 // Request interceptor
 api.interceptors.request.use(
@@ -58,7 +63,7 @@ api.interceptors.response.use(
       console.warn('Authentication failed - clearing credentials');
       localStorage.removeItem('token');
       localStorage.removeItem('tenantId');
-      window.location.href = '/login';
+      window.location.href = '/milk/login';
     }
     return Promise.reject(error);
   }
@@ -267,12 +272,14 @@ export const debugAPI = {
 
 // SaaS Admin API - Separate instance with different token handling
 export const saasApi = axios.create({
-  baseURL: 'http://localhost:8000/api',
+  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:8000/api',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
+
+
 
 // SaaS Admin request interceptor
 saasApi.interceptors.request.use(
@@ -297,7 +304,7 @@ saasApi.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('saas_admin_token');
       localStorage.removeItem('saas_admin_user');
-      window.location.href = '/saas-admin/login';
+      window.location.href = '/milk/saas-admin/login';
     }
     return Promise.reject(error);
   }

@@ -36,7 +36,7 @@ const TenantLogin = () => {
     try {
       await login(values.username, values.password, values.tenantId);
       message.success('Login successful');
-      navigate('/dashboard');
+      navigate('dashboard');
     } catch (error) {
       console.error('Login error:', error);
       message.error(error.message || 'Login failed');

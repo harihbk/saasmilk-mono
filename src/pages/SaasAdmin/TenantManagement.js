@@ -454,9 +454,14 @@ const TenantManagement = () => {
       <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <Title level={2} style={{ margin: 0 }}>
-            <GlobalOutlined /> Tenant Management
+            <CrownOutlined style={{ color: '#722ed1' }} /> SaaS Tenant Management
           </Title>
-          <Text type="secondary">Manage all tenants in your SaaS platform</Text>
+          <Text type="secondary">Super Admin Portal - Manage all multi-tenant companies, subscriptions, and billing</Text>
+          <div style={{ marginTop: 8 }}>
+            <Tag color="purple">SUPER ADMIN ONLY</Tag>
+            <Tag color="blue">Multi-Tenant SaaS Management</Tag>
+            <Tag color="green">Subscription & Billing Control</Tag>
+          </div>
         </div>
         <Space>
           <Button 

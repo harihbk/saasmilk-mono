@@ -55,7 +55,7 @@ const CompanyManagement = () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('saas_admin_token');
-      const response = await axios.get('http://localhost:8000/api/companies', {
+      const response = await axios.get(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/companies`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
@@ -73,7 +73,7 @@ const CompanyManagement = () => {
   const fetchStats = async () => {
     try {
       const token = localStorage.getItem('saas_admin_token');
-      const response = await axios.get('http://localhost:8000/api/companies/stats', {
+      const response = await axios.get(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/companies/stats`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
@@ -87,7 +87,7 @@ const CompanyManagement = () => {
 
   const fetchNextTenantId = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/api/companies/next-tenant-id');
+      const response = await axios.get(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/companies/next-tenant-id`);
       if (response.data.success) {
         setNextTenantId(response.data.data.nextTenantId);
       }
@@ -99,7 +99,7 @@ const CompanyManagement = () => {
   const handleCreateCompany = async (values) => {
     try {
       const token = localStorage.getItem('saas_admin_token');
-      const response = await axios.post('http://localhost:8000/api/companies/register', {
+      const response = await axios.post(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/companies/register`, {
         companyName: values.companyName,
         email: values.email,
         ownerName: values.ownerName,
@@ -133,7 +133,7 @@ const CompanyManagement = () => {
     try {
       const token = localStorage.getItem('saas_admin_token');
       const response = await axios.patch(
-        `http://localhost:8000/api/saas-admin/companies/${companyId}/suspend`,
+        `${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/saas-admin/companies/${companyId}/suspend`,
         { suspend, reason: suspend ? 'Suspended by admin' : '' },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -251,10 +251,20 @@ const CompanyManagement = () => {
   return (
     <div style={{ padding: '24px' }}>
       <div style={{ marginBottom: '24px' }}>
-        <Title level={2}>Company Management</Title>
+        <Title level={2}>
+          <ShopOutlined style={{ color: '#1890ff' }} /> Company Registration Management
+        </Title>
         <Text type="secondary">
-          Manage all companies and tenants in your SaaS platform
+          View and manage company registrations (This is for viewing registered companies only)
         </Text>
+        <div style={{ marginTop: 8 }}>
+          <Alert
+            message="Note: This page shows company registrations. For full SaaS tenant management with subscription & billing control, use the Tenant Management page."
+            type="info"
+            showIcon
+            style={{ marginTop: 8 }}
+          />
+        </div>
       </div>
 
       {/* Statistics */}

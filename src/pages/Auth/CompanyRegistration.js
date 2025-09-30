@@ -423,7 +423,7 @@ const CompanyRegistration = () => {
               <Button 
                 type="primary" 
                 size="large"
-                onClick={() => navigate('/tenant')}
+                onClick={() => navigate('tenant')}
                 style={{ minWidth: '150px' }}
               >
                 Login to Workspace
