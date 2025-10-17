@@ -50,16 +50,27 @@ const Products = () => {
     pageSize: 10,
     total: 0,
   });
+  const [priceMetrics, setPriceMetrics] = useState({
+    profitMargin: 0,
+    wholesaleMargin: 0,
+    isValid: false
+  });
 
+  // Fetch categories on component mount
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  // Fetch products when filters or pagination change
   useEffect(() => {
     fetchProducts();
-    fetchCategories();
   }, [pagination.current, pagination.pageSize, searchText, categoryFilter, statusFilter]);
 
   const fetchCategories = async () => {
     try {
       const response = await categoriesAPI.getActiveCategories();
-      setCategories(response.data.data.categories || []);
+      const categoriesData = response.data.data.categories || response.data.data || [];
+      setCategories(Array.isArray(categoriesData) ? categoriesData : []);
     } catch (error) {
       console.error('Error fetching categories:', error);
       // Keep empty array if API fails
@@ -170,9 +181,41 @@ const Products = () => {
     setPagination(prev => ({ ...prev, current: 1 }));
   };
 
+  const calculatePriceMetrics = () => {
+    const cost = form.getFieldValue('cost') || 0;
+    const selling = form.getFieldValue('price') || 0;
+    const wholesale = form.getFieldValue('wholesale') || 0;
+
+    let profitMargin = 0;
+    let wholesaleMargin = 0;
+    let isValid = true;
+
+    if (cost > 0 && selling > 0) {
+      profitMargin = ((selling - cost) / cost * 100);
+      if (selling <= cost) isValid = false;
+    }
+
+    if (cost > 0 && wholesale > 0) {
+      wholesaleMargin = ((wholesale - cost) / cost * 100);
+      if (wholesale <= cost || wholesale >= selling) isValid = false;
+    }
+
+    setPriceMetrics({
+      profitMargin: profitMargin.toFixed(2),
+      wholesaleMargin: wholesaleMargin.toFixed(2),
+      isValid
+    });
+  };
+
   const showModal = (product = null) => {
     setEditingProduct(product);
     setModalVisible(true);
+    // Reset price metrics
+    setPriceMetrics({
+      profitMargin: 0,
+      wholesaleMargin: 0,
+      isValid: false
+    });
     if (product) {
       // Handle nested object structure properly for editing
       const priceValue = typeof product.price === 'object' ? product.price.selling : product.price;
@@ -211,6 +254,11 @@ const Products = () => {
     setModalVisible(false);
     setEditingProduct(null);
     form.resetFields();
+    setPriceMetrics({
+      profitMargin: 0,
+      wholesaleMargin: 0,
+      isValid: false
+    });
   };
 
   const handleSubmit = async (values) => {
@@ -311,10 +359,30 @@ const Products = () => {
       title: 'Category',
       dataIndex: 'category',
       key: 'category',
-      render: (category) => {
-        // Handle both string (old) and object (new) formats
-        const categoryName = typeof category === 'object' ? category?.displayName || category?.name : category;
-        return <Tag color="blue">{categoryName || 'N/A'}</Tag>;
+      render: (category, record) => {
+        // Handle multiple data formats
+        let displayValue = 'N/A';
+
+        // First check if record has categoryDetails (virtual field from backend)
+        if (record.categoryDetails) {
+          displayValue = record.categoryDetails.displayName || record.categoryDetails.name || 'N/A';
+        } else if (category) {
+          if (typeof category === 'object' && category !== null) {
+            // If it's an object (populated from backend)
+            displayValue = category.displayName || category.name || 'N/A';
+          } else if (typeof category === 'string') {
+            // If it's just an ID string, try to find it in categories array
+            const foundCategory = categories.find(c => c._id === category);
+            if (foundCategory) {
+              displayValue = foundCategory.displayName || foundCategory.name;
+            } else {
+              // If not found in categories, use a fallback
+              displayValue = 'Uncategorized';
+            }
+          }
+        }
+
+        return <Tag color="blue">{displayValue}</Tag>;
       },
     },
     {
@@ -560,9 +628,9 @@ const Products = () => {
 
           <Form.Item
             name="description"
-            label="Description"
+            label="Description (Optional)"
           >
-            <TextArea rows={3} placeholder="Enter product description" />
+            <TextArea rows={3} placeholder="Enter product description (optional)" />
           </Form.Item>
 
           <Row gutter={16}>
@@ -606,14 +674,32 @@ const Products = () => {
               <Form.Item
                 name="price"
                 label="Selling Price"
-                rules={[{ required: true, message: 'Please enter price' }]}
+                rules={[
+                  { required: true, message: 'Please enter selling price' },
+                  { type: 'number', min: 0.01, message: 'Selling price must be greater than 0' },
+                  { type: 'number', max: 999999.99, message: 'Selling price cannot exceed ₹999,999.99' },
+                  ({ getFieldValue }) => ({
+                    validator(_, value) {
+                      const costPrice = getFieldValue('cost');
+                      if (value && costPrice && value <= costPrice) {
+                        return Promise.reject(new Error('Selling price should be greater than cost price'));
+                      }
+                      return Promise.resolve();
+                    },
+                  }),
+                ]}
               >
                 <InputNumber
-                  min={0}
+                  min={0.01}
+                  max={999999.99}
                   step={0.01}
                   precision={2}
                   style={{ width: '100%' }}
                   placeholder="0.00"
+                  prefix="₹"
+                  onChange={() => {
+                    calculatePriceMetrics();
+                  }}
                 />
               </Form.Item>
             </Col>
@@ -621,14 +707,25 @@ const Products = () => {
               <Form.Item
                 name="cost"
                 label="Cost Price"
-                rules={[{ required: true, message: 'Please enter cost' }]}
+                rules={[
+                  { required: true, message: 'Please enter cost price' },
+                  { type: 'number', min: 0.01, message: 'Cost price must be greater than 0' },
+                  { type: 'number', max: 999999.99, message: 'Cost price cannot exceed ₹999,999.99' },
+                ]}
               >
                 <InputNumber
-                  min={0}
+                  min={0.01}
+                  max={999999.99}
                   step={0.01}
                   precision={2}
                   style={{ width: '100%' }}
                   placeholder="0.00"
+                  prefix="₹"
+                  onChange={() => {
+                    // Trigger validation for selling price when cost changes
+                    form.validateFields(['price']).catch(() => {});
+                    calculatePriceMetrics();
+                  }}
                 />
               </Form.Item>
             </Col>
@@ -636,13 +733,39 @@ const Products = () => {
               <Form.Item
                 name="wholesale"
                 label="Wholesale Price"
+                rules={[
+                  { type: 'number', min: 0.01, message: 'Wholesale price must be greater than 0' },
+                  { type: 'number', max: 999999.99, message: 'Wholesale price cannot exceed ₹999,999.99' },
+                  ({ getFieldValue }) => ({
+                    validator(_, value) {
+                      if (!value) return Promise.resolve(); // Optional field
+                      const costPrice = getFieldValue('cost');
+                      const sellingPrice = getFieldValue('price');
+
+                      if (costPrice && value <= costPrice) {
+                        return Promise.reject(new Error('Wholesale price should be greater than cost price'));
+                      }
+                      if (sellingPrice && value >= sellingPrice) {
+                        return Promise.reject(new Error('Wholesale price should be less than selling price'));
+                      }
+                      return Promise.resolve();
+                    },
+                  }),
+                ]}
               >
                 <InputNumber
-                  min={0}
+                  min={0.01}
+                  max={999999.99}
                   step={0.01}
                   precision={2}
                   style={{ width: '100%' }}
                   placeholder="0.00"
+                  prefix="₹"
+                  onChange={() => {
+                    // Trigger validation for related price fields
+                    form.validateFields(['price']).catch(() => {});
+                    calculatePriceMetrics();
+                  }}
                 />
               </Form.Item>
             </Col>
@@ -662,6 +785,52 @@ const Products = () => {
               </Form.Item>
             </Col>
           </Row>
+
+          {/* Price Summary */}
+          {(priceMetrics.profitMargin > 0 || priceMetrics.wholesaleMargin > 0) && (
+            <Row gutter={16} style={{ marginBottom: 16 }}>
+              <Col span={24}>
+                <Card size="small" style={{ backgroundColor: '#f8f9fa' }}>
+                  <Row gutter={16}>
+                    <Col span={8}>
+                      <Statistic
+                        title="Profit Margin"
+                        value={priceMetrics.profitMargin}
+                        suffix="%"
+                        valueStyle={{
+                          color: priceMetrics.profitMargin > 0 ? '#52c41a' : '#ff4d4f',
+                          fontSize: '16px'
+                        }}
+                      />
+                    </Col>
+                    {priceMetrics.wholesaleMargin > 0 && (
+                      <Col span={8}>
+                        <Statistic
+                          title="Wholesale Margin"
+                          value={priceMetrics.wholesaleMargin}
+                          suffix="%"
+                          valueStyle={{
+                            color: priceMetrics.wholesaleMargin > 0 ? '#52c41a' : '#ff4d4f',
+                            fontSize: '16px'
+                          }}
+                        />
+                      </Col>
+                    )}
+                    <Col span={8}>
+                      <Statistic
+                        title="Price Structure"
+                        value={priceMetrics.isValid ? "Valid" : "Invalid"}
+                        valueStyle={{
+                          color: priceMetrics.isValid ? '#52c41a' : '#ff4d4f',
+                          fontSize: '16px'
+                        }}
+                      />
+                    </Col>
+                  </Row>
+                </Card>
+              </Col>
+            </Row>
+          )}
 
           {/* Tax Information */}
           <Row gutter={16}>

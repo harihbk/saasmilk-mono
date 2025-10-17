@@ -746,12 +746,23 @@ router.put('/:id/payment', [
       });
     }
 
+    // Initialize payment object if it doesn't exist
+    if (!order.payment) {
+      order.payment = {
+        method: 'cash',
+        status: 'pending',
+        paidAmount: 0,
+        dueAmount: order.pricing.total
+      };
+    }
+
     // Update payment information
     if (paidAmount !== undefined) {
       // Add the new payment to existing paid amount
       const newTotalPaid = (order.payment.paidAmount || 0) + paidAmount;
       order.payment.paidAmount = newTotalPaid;
-      order.payment.dueAmount = order.pricing.total - newTotalPaid;
+      // Ensure dueAmount never goes below 0
+      order.payment.dueAmount = Math.max(0, order.pricing.total - newTotalPaid);
       
       // Automatically determine payment status based on total amount paid
       if (newTotalPaid >= order.pricing.total) {

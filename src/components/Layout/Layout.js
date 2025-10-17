@@ -83,38 +83,6 @@ const Layout = () => {
         label: 'Inventory',
       },
       {
-        key: 'procurement',
-        icon: <ShoppingOutlined />,
-        label: 'Procurement',
-        children: [
-          {
-            key: '/procurement',
-            icon: <FileTextOutlined />,
-            label: 'All Procurements',
-          },
-          {
-            key: '/procurement/create',
-            icon: <PlusOutlined />,
-            label: 'New Voucher (Tally)',
-          },
-          {
-            key: '/procurement?status=pending-approval',
-            icon: <ClockCircleOutlined />,
-            label: 'Pending Approvals',
-          },
-          {
-            key: '/procurement?status=received',
-            icon: <CheckCircleOutlined />,
-            label: 'Received Orders',
-          },
-          {
-            key: '/procurement/analytics',
-            icon: <BarChartOutlined />,
-            label: 'Analytics',
-          },
-        ],
-      },
-      {
         key: '/fleet',
         icon: <CarOutlined />,
         label: 'Fleet',
@@ -274,7 +242,7 @@ const Layout = () => {
         <Menu
           mode="inline"
           selectedKeys={[location.pathname + location.search]}
-          defaultOpenKeys={['procurement']}
+          defaultOpenKeys={[]}
           items={menuItems}
           onClick={handleMenuClick}
           style={{ borderRight: 0 }}

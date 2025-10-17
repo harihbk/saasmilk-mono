@@ -135,148 +135,10 @@ const Orders = () => {
   }, [editingOrder, modalVisible]);
 
   // Debug functions to check database
-  const checkDatabaseStatus = async () => {
-    try {
-      console.log('Checking database status...');
-      const collectionsResponse = await debugAPI.getCollections();
-      const inventoryResponse = await debugAPI.getInventory();
-      
-      console.log('Collections:', collectionsResponse.data);
-      console.log('Inventory data:', inventoryResponse.data);
-      
-      const { counts } = collectionsResponse.data.data;
-      const { inventory, products } = inventoryResponse.data.data;
-      
-      const statusMessage = `Database Status:\n` +
-        `- Products: ${products.count} items\n` +
-        `- Inventory: ${inventory.count} items\n` +
-        `- Orders: ${counts.orders || 0} items\n` +
-        `- Dealers: ${counts.dealers || 0} items`;
-      
-      Modal.info({
-        title: 'Database Status',
-        content: (
-          <div>
-            <pre style={{ whiteSpace: 'pre-wrap', fontSize: '12px' }}>{statusMessage}</pre>
-            {inventory.count === 0 && (
-              <Alert 
-                message="No inventory found!" 
-                description="This explains why you're getting 'Product not found in inventory' error."
-                type="warning" 
-                style={{ marginTop: 12 }}
-              />
-            )}
-          </div>
-        ),
-        width: 500
-      });
-      
-    } catch (error) {
-      console.error('Database check failed:', error);
-      message.error(`Database check failed: ${error.message}`);
-    }
-  };
 
-  const createSampleData = async () => {
-    try {
-      console.log('Creating sample inventory data...');
-      const response = await debugAPI.createSampleInventory();
-      console.log('Sample data creation response:', response.data);
-      
-      if (response.data.success) {
-        message.success(`Created ${response.data.data.created} inventory items`);
-        // Refresh the data
-        fetchProducts();
-      } else {
-        message.error(response.data.message);
-      }
-    } catch (error) {
-      console.error('Sample data creation failed:', error);
-      message.error(`Failed to create sample data: ${error.response?.data?.message || error.message}`);
-    }
-  };
 
-  const createDefaultWarehouses = async () => {
-    try {
-      console.log('Creating default warehouses...');
-      const response = await debugAPI.createDefaultWarehouses();
-      console.log('Warehouse creation response:', response.data);
-      
-      if (response.data.success) {
-        message.success(`Created ${response.data.data.created.length} warehouses. Total: ${response.data.data.total}`);
-      } else {
-        message.error(response.data.message);
-      }
-    } catch (error) {
-      console.error('Warehouse creation failed:', error);
-      message.error(`Failed to create warehouses: ${error.response?.data?.message || error.message}`);
-    }
-  };
 
-  const migrateInventoryWarehouses = async () => {
-    try {
-      console.log('Migrating inventory warehouse references...');
-      const response = await debugAPI.migrateInventoryWarehouses();
-      console.log('Migration response:', response.data);
-      
-      if (response.data.success) {
-        const { migrated, failed, totalItems } = response.data.data;
-        message.success(`Migration completed! ${migrated}/${totalItems} items migrated successfully. ${failed} failed.`);
-        
-        if (response.data.data.errors.length > 0) {
-          console.error('Migration errors:', response.data.data.errors);
-        }
-      } else {
-        message.error(response.data.message);
-      }
-    } catch (error) {
-      console.error('Migration failed:', error);
-      message.error(`Failed to migrate inventory: ${error.response?.data?.message || error.message}`);
-    }
-  };
 
-  const analyzeStockIssues = async () => {
-    try {
-      console.log('Analyzing stock and database issues...');
-      const response = await debugAPI.getStockAnalysis();
-      console.log('=== COMPREHENSIVE STOCK ANALYSIS ===');
-      console.log('Full analysis data:', response.data.data);
-      
-      const data = response.data.data;
-      
-      console.log('\n📊 SUMMARY:');
-      console.log(`- Products: ${data.summary.totalProducts}`);
-      console.log(`- Inventory Items: ${data.summary.totalInventory}`);
-      console.log(`- Warehouses: ${data.summary.totalWarehouses}`);
-      console.log(`- Orders: ${data.summary.totalOrders}`);
-      
-      console.log('\n📦 PRODUCTS:', data.products);
-      console.log('\n🏪 WAREHOUSES:', data.warehouses);
-      console.log('\n📋 INVENTORY:', data.inventory);
-      console.log('\n📈 STOCK ANALYSIS:', data.stockAnalysis);
-      console.log('\n📝 RECENT ORDERS:', data.recentOrders);
-      
-      if (data.issues.length > 0) {
-        console.log('\n⚠️  ISSUES FOUND:');
-        data.issues.forEach((issue, index) => {
-          console.log(`${index + 1}. ${issue}`);
-        });
-        message.warning(`Found ${data.issues.length} issues. Check console for details.`);
-      } else {
-        console.log('\n✅ NO MAJOR ISSUES DETECTED');
-        message.success('No major stock issues detected!');
-      }
-      
-      console.log('\n💡 RECOMMENDATIONS:');
-      data.recommendations.forEach((rec, index) => {
-        console.log(`${index + 1}. ${rec}`);
-      });
-      
-    } catch (error) {
-      console.error('Stock analysis failed:', error);
-      message.error(`Failed to analyze stock: ${error.response?.data?.message || error.message}`);
-    }
-  };
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -735,9 +597,14 @@ const Orders = () => {
       deliveryDateValue = dayjs(order.shipping.deliveryDate);
     }
     
+    // Handle notes object properly
+    const notesValue = typeof order.notes === 'object' && order.notes !== null
+      ? (order.notes.customer || order.notes.internal || order.notes.delivery || '')
+      : (order.notes || '');
+
     console.log('Setting form values:', {
       status: order.status,
-      notes: order.notes?.customer || order.notes || '',
+      notes: notesValue,
       paymentMethod: order.payment?.method || 'cash',
       shippingMethod: order.shipping?.method || 'pickup',
       deliveryDate: deliveryDateValue,
@@ -750,7 +617,7 @@ const Orders = () => {
     setTimeout(() => {
       form.setFieldsValue({
         status: order.status,
-        notes: order.notes?.customer || order.notes || '',
+        notes: notesValue,
         paymentMethod: order.payment?.method || 'cash',
         shippingMethod: order.shipping?.method || 'pickup',
         deliveryDate: deliveryDateValue,
@@ -1327,46 +1194,14 @@ const Orders = () => {
         <Title level={2} style={{ margin: 0 }}>
           <ShoppingCartOutlined /> Orders Management
         </Title>
-        <Space>
-          <Button
-            onClick={checkDatabaseStatus}
-            style={{ backgroundColor: '#e6f7ff', borderColor: '#91d5ff' }}
-          >
-            Check DB Status
-          </Button>
-          <Button
-            onClick={createSampleData}
-            style={{ backgroundColor: '#f6ffed', borderColor: '#b7eb8f' }}
-          >
-            Create Sample Data
-          </Button>
-          <Button
-            onClick={createDefaultWarehouses}
-            style={{ backgroundColor: '#fff7e6', borderColor: '#ffd591' }}
-          >
-            Create Warehouses
-          </Button>
-          <Button
-            onClick={migrateInventoryWarehouses}
-            style={{ backgroundColor: '#fff0f6', borderColor: '#ffadd2' }}
-          >
-            Migrate Inventory
-          </Button>
-          <Button
-            onClick={analyzeStockIssues}
-            style={{ backgroundColor: '#f0f5ff', borderColor: '#adc6ff' }}
-          >
-            Analyze Stock Issues
-          </Button>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={showCreateOrderModal}
-            size="large"
-          >
-            Create New Order
-          </Button>
-        </Space>
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={showCreateOrderModal}
+          size="large"
+        >
+          Create New Order
+        </Button>
       </div>
 
       {/* Summary Cards */}
@@ -2187,9 +2022,9 @@ const Orders = () => {
           <Button key="close" onClick={() => setViewModalVisible(false)}>
             Close
           </Button>,
-          <Button 
-            key="invoice" 
-            type="primary" 
+          <Button
+            key="invoice"
+            type="primary"
             onClick={() => {
               setViewModalVisible(false);
               showInvoiceModal(viewingOrder);
@@ -2198,7 +2033,7 @@ const Orders = () => {
             View Invoice
           </Button>
         ]}
-        width={900}
+        width={1100}
       >
         {viewingOrder && (
           <div>
@@ -2249,8 +2084,25 @@ const Orders = () => {
               columns={[
                 {
                   title: 'Product',
-                  dataIndex: 'productName',
-                  key: 'productName',
+                  key: 'product',
+                  render: (_, record) => {
+                    const productName = record.productName ||
+                                       record.product?.name ||
+                                       record.productId?.name ||
+                                       'Unknown Product';
+                    const sku = record.product?.sku || record.sku;
+
+                    return (
+                      <div>
+                        <div style={{ fontWeight: 500 }}>{productName}</div>
+                        {sku && (
+                          <div style={{ fontSize: '12px', color: '#666' }}>
+                            SKU: {sku}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  },
                 },
                 {
                   title: 'Quantity',
@@ -2286,8 +2138,14 @@ const Orders = () => {
             />
 
             <Row justify="end" style={{ marginTop: 16 }}>
-              <Col span={8}>
-                <Descriptions size="small" bordered>
+              <Col span={12}>
+                <Descriptions
+                  size="small"
+                  bordered
+                  column={1}
+                  labelStyle={{ width: '140px', fontWeight: 600 }}
+                  contentStyle={{ textAlign: 'right', fontWeight: 500 }}
+                >
                   <Descriptions.Item label="Subtotal">
                     ₹{(viewingOrder.pricing?.subtotal || 0).toFixed(2)}
                   </Descriptions.Item>
@@ -2298,16 +2156,33 @@ const Orders = () => {
                     ₹{(viewingOrder.pricing?.tax || 0).toFixed(2)}
                   </Descriptions.Item>
                   <Descriptions.Item label="Grand Total">
-                    <strong>₹{(viewingOrder.pricing?.total || 0).toFixed(2)}</strong>
+                    <strong style={{ fontSize: '16px' }}>₹{(viewingOrder.pricing?.total || 0).toFixed(2)}</strong>
                   </Descriptions.Item>
                 </Descriptions>
               </Col>
             </Row>
 
-            {(viewingOrder.notes?.customer || viewingOrder.notes) && (
+            {(viewingOrder.notes?.customer || viewingOrder.notes?.internal || viewingOrder.notes?.delivery) && (
               <>
                 <Divider orientation="left">Notes</Divider>
-                <Text>{viewingOrder.notes?.customer || viewingOrder.notes}</Text>
+                {viewingOrder.notes?.customer && (
+                  <div style={{ marginBottom: 8 }}>
+                    <Text strong>Customer Notes: </Text>
+                    <Text>{viewingOrder.notes.customer}</Text>
+                  </div>
+                )}
+                {viewingOrder.notes?.internal && (
+                  <div style={{ marginBottom: 8 }}>
+                    <Text strong>Internal Notes: </Text>
+                    <Text>{viewingOrder.notes.internal}</Text>
+                  </div>
+                )}
+                {viewingOrder.notes?.delivery && (
+                  <div style={{ marginBottom: 8 }}>
+                    <Text strong>Delivery Notes: </Text>
+                    <Text>{viewingOrder.notes.delivery}</Text>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -3131,17 +3006,17 @@ Add: Total Tax
             </div>
 
             {/* Corporate Light Terms and Conditions / Notes */}
-            {(viewingOrder?.notes?.customer || viewingOrder?.notes) && (
-              <div style={{ 
-                margin: '15px 0', 
-                border: '1px solid #cbd5e1', 
+            {(viewingOrder?.notes?.customer || viewingOrder?.notes?.internal || viewingOrder?.notes?.delivery) && (
+              <div style={{
+                margin: '15px 0',
+                border: '1px solid #cbd5e1',
                 borderRadius: '6px',
                 overflow: 'hidden',
                 boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
               }}>
-                <div style={{ 
-                  fontWeight: '700', 
-                  fontSize: '12px', 
+                <div style={{
+                  fontWeight: '700',
+                  fontSize: '12px',
                   padding: '12px',
                   backgroundColor: '#f1f5f9',
                   color: '#334155',
@@ -3149,14 +3024,29 @@ Add: Total Tax
                 }}>
                   📝 REMARKS/NOTES:
                 </div>
-                <div style={{ 
-                  fontSize: '11px', 
+                <div style={{
+                  fontSize: '11px',
                   lineHeight: '1.6',
                   padding: '15px',
                   backgroundColor: '#fefefe',
                   color: '#475569'
                 }}>
-                  {viewingOrder?.notes?.customer || viewingOrder?.notes || 'No remarks available'}
+                  {viewingOrder?.notes?.customer && (
+                    <div style={{ marginBottom: '8px' }}>
+                      <strong>Customer Notes:</strong> {viewingOrder.notes.customer}
+                    </div>
+                  )}
+                  {viewingOrder?.notes?.internal && (
+                    <div style={{ marginBottom: '8px' }}>
+                      <strong>Internal Notes:</strong> {viewingOrder.notes.internal}
+                    </div>
+                  )}
+                  {viewingOrder?.notes?.delivery && (
+                    <div style={{ marginBottom: '8px' }}>
+                      <strong>Delivery Notes:</strong> {viewingOrder.notes.delivery}
+                    </div>
+                  )}
+                  {!viewingOrder?.notes?.customer && !viewingOrder?.notes?.internal && !viewingOrder?.notes?.delivery && 'No remarks available'}
                 </div>
               </div>
             )}

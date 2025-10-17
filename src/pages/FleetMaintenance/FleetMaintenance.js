@@ -77,9 +77,23 @@ const FleetMaintenance = () => {
   const fetchStats = async () => {
     try {
       const response = await fleetMaintenanceAPI.getStats();
-      setStats(response.data.data || {});
+      const statsData = response.data.data || {};
+
+      // Extract stats from nested structure
+      const formattedStats = {
+        totalRecords: statsData.summary?.totalRecords || 0,
+        completedRecords: statsData.summary?.completedRecords || 0,
+        pendingRecords: statsData.summary?.pendingRecords || 0,
+        overdueRecords: statsData.summary?.overdueRecords || 0,
+        totalCost: statsData.costs?.totalCost || 0,
+        avgCost: statsData.costs?.avgCost || 0,
+        completionRate: statsData.summary?.completionRate || 0
+      };
+
+      setStats(formattedStats);
     } catch (error) {
       console.error('Error fetching maintenance stats:', error);
+      message.error('Failed to fetch maintenance statistics');
     }
   };
 
@@ -269,24 +283,30 @@ const FleetMaintenance = () => {
     {
       title: 'Actions',
       key: 'actions',
+      width: 120,
+      fixed: 'right',
       render: (_, record) => (
-        <Space>
+        <Space size="small">
           <Button
             type="link"
+            size="small"
             icon={<EditOutlined />}
             onClick={() => handleEdit(record)}
-          >
-            Edit
-          </Button>
+            style={{ padding: '4px 8px' }}
+          />
           <Popconfirm
             title="Are you sure you want to delete this maintenance record?"
             onConfirm={() => handleDelete(record._id)}
             okText="Yes"
             cancelText="No"
           >
-            <Button type="link" danger icon={<DeleteOutlined />}>
-              Delete
-            </Button>
+            <Button
+              type="link"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              style={{ padding: '4px 8px' }}
+            />
           </Popconfirm>
         </Space>
       ),
@@ -303,9 +323,9 @@ const FleetMaintenance = () => {
       </div>
 
       {/* Stats Cards */}
-      <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={6}>
-          <Card>
+      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+        <Col xs={12} sm={8} md={6} lg={4}>
+          <Card hoverable>
             <Statistic
               title="Total Records"
               value={stats.totalRecords || 0}
@@ -314,8 +334,8 @@ const FleetMaintenance = () => {
             />
           </Card>
         </Col>
-        <Col span={6}>
-          <Card>
+        <Col xs={12} sm={8} md={6} lg={4}>
+          <Card hoverable>
             <Statistic
               title="Completed"
               value={stats.completedRecords || 0}
@@ -324,23 +344,44 @@ const FleetMaintenance = () => {
             />
           </Card>
         </Col>
-        <Col span={6}>
-          <Card>
+        <Col xs={12} sm={8} md={6} lg={4}>
+          <Card hoverable>
             <Statistic
-              title="In Progress"
-              value={stats.inProgressRecords || 0}
+              title="Pending"
+              value={stats.pendingRecords || 0}
               prefix={<ClockCircleOutlined />}
               valueStyle={{ color: '#faad14' }}
             />
           </Card>
         </Col>
-        <Col span={6}>
-          <Card>
+        <Col xs={12} sm={8} md={6} lg={4}>
+          <Card hoverable>
+            <Statistic
+              title="Overdue"
+              value={stats.overdueRecords || 0}
+              valueStyle={{ color: '#ff4d4f' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={8} md={6} lg={4}>
+          <Card hoverable>
             <Statistic
               title="Total Cost"
               value={stats.totalCost || 0}
               prefix="₹"
+              precision={0}
               valueStyle={{ color: '#722ed1' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={8} md={6} lg={4}>
+          <Card hoverable>
+            <Statistic
+              title="Completion Rate"
+              value={stats.completionRate || 0}
+              suffix="%"
+              precision={1}
+              valueStyle={{ color: '#1890ff' }}
             />
           </Card>
         </Col>
@@ -368,6 +409,7 @@ const FleetMaintenance = () => {
           dataSource={maintenanceRecords}
           rowKey="_id"
           loading={loading}
+          scroll={{ x: 800 }}
           pagination={{
             pageSize: 10,
             showSizeChanger: true,

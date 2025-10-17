@@ -17,6 +17,8 @@ import {
   Popconfirm,
   Typography,
   Divider,
+  Descriptions,
+  Tooltip,
 } from 'antd';
 import {
   PlusOutlined,
@@ -26,6 +28,7 @@ import {
   ToolOutlined,
   CalendarOutlined,
   DollarOutlined,
+  EyeOutlined,
 } from '@ant-design/icons';
 import { fleetAPI } from '../../services/api';
 import dayjs from 'dayjs';
@@ -35,9 +38,12 @@ const { Option } = Select;
 
 const Fleet = () => {
   const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [vehicles, setVehicles] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
+  const [viewModalVisible, setViewModalVisible] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState(null);
+  const [viewingVehicle, setViewingVehicle] = useState(null);
   const [stats, setStats] = useState({});
   const [availableDrivers, setAvailableDrivers] = useState([]);
   const [driversLoading, setDriversLoading] = useState(false);
@@ -65,7 +71,20 @@ const Fleet = () => {
   const fetchStats = async () => {
     try {
       const response = await fleetAPI.getStats();
-      setStats(response.data.data || {});
+      // Extract summary stats and also fetch service due vehicles
+      const statsData = response.data.data || {};
+      setStats(statsData.summary || {});
+
+      // Fetch service due vehicles count
+      try {
+        const serviceDueResponse = await fleetAPI.getServiceDue({ days: 30 });
+        setStats(prev => ({
+          ...prev,
+          serviceDueVehicles: serviceDueResponse.data.data.summary?.total || 0
+        }));
+      } catch (err) {
+        console.error('Error fetching service due vehicles:', err);
+      }
     } catch (error) {
       console.error('Error fetching fleet stats:', error);
     }
@@ -85,37 +104,80 @@ const Fleet = () => {
   };
 
   const handleSubmit = async (values) => {
+    setSubmitting(true);
     try {
       const vehicleData = {
         ...values,
         registrationDate: values.registrationDate?.toDate(),
+        // Convert currentMileage to currentOdometer for backend
+        currentOdometer: parseInt(values.currentMileage) || 0,
+        // Add mileage field with value and unit if provided
+        mileage: values.fuelEfficiency ? {
+          value: parseFloat(values.fuelEfficiency),
+          unit: 'kmpl'
+        } : undefined,
       };
+
+      // Remove frontend-only fields
+      delete vehicleData.currentMileage;
+      delete vehicleData.fuelEfficiency;
 
       if (editingVehicle) {
         await fleetAPI.updateVehicle(editingVehicle._id, vehicleData);
         message.success('Vehicle updated successfully');
       } else {
         await fleetAPI.createVehicle(vehicleData);
-        message.success('Vehicle created successfully');
+        message.success('Vehicle added successfully');
       }
 
       setModalVisible(false);
       setEditingVehicle(null);
       form.resetFields();
-      fetchVehicles();
-      fetchStats();
+      await Promise.all([fetchVehicles(), fetchStats()]);
     } catch (error) {
       console.error('Error saving vehicle:', error);
-      message.error('Failed to save vehicle');
+      const errorMsg = error.response?.data?.message || 'Failed to save vehicle. Please try again.';
+      message.error(errorMsg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleView = async (vehicle) => {
+    try {
+      setLoading(true);
+      const response = await fleetAPI.getVehicle(vehicle._id);
+      setViewingVehicle(response.data.data.vehicle);
+      setViewModalVisible(true);
+    } catch (error) {
+      console.error('Error fetching vehicle details:', error);
+      message.error('Failed to fetch vehicle details');
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleEdit = (vehicle) => {
     setEditingVehicle(vehicle);
-    form.setFieldsValue({
-      ...vehicle,
+    // Prepare form values with proper field mapping
+    const formValues = {
+      vehicleNumber: vehicle.vehicleNumber,
+      vehicleType: vehicle.vehicleType,
+      make: vehicle.make,
+      model: vehicle.model,
+      year: vehicle.year,
+      status: vehicle.status,
+      fuelType: vehicle.fuelType,
+      notes: vehicle.notes,
+      // Map assignedDriver - handle both string ID and object formats
+      assignedDriver: vehicle.assignedDriver?._id || vehicle.assignedDriver || undefined,
+      // Map date fields
       registrationDate: vehicle.registrationDate ? dayjs(vehicle.registrationDate) : null,
-    });
+      // Map backend fields to frontend fields
+      currentMileage: vehicle.currentOdometer || 0,
+      fuelEfficiency: vehicle.mileage?.value || null,
+    };
+    form.setFieldsValue(formValues);
     setModalVisible(true);
   };
 
@@ -134,9 +196,11 @@ const Fleet = () => {
   const getStatusColor = (status) => {
     const colors = {
       active: 'green',
+      inactive: 'default',
       maintenance: 'orange',
-      out_of_service: 'red',
-      retired: 'default',
+      breakdown: 'red',
+      sold: 'purple',
+      accident: 'red'
     };
     return colors[status] || 'default';
   };
@@ -145,6 +209,8 @@ const Fleet = () => {
     {
       title: 'Vehicle Details',
       key: 'details',
+      fixed: 'left',
+      width: 200,
       render: (_, record) => (
         <div>
           <div style={{ fontWeight: 'bold' }}>{record.vehicleNumber}</div>
@@ -164,9 +230,14 @@ const Fleet = () => {
       title: 'Driver',
       dataIndex: 'assignedDriver',
       key: 'assignedDriver',
-      render: (driverId) => {
-        if (!driverId) return 'Unassigned';
-        const driver = availableDrivers.find(d => d.value === driverId);
+      render: (assignedDriver) => {
+        if (!assignedDriver) return 'Unassigned';
+        // Handle both object (populated) and string (ID only) formats
+        if (typeof assignedDriver === 'object') {
+          return assignedDriver.name || assignedDriver.email || 'Unknown Driver';
+        }
+        // If it's just an ID string, try to find it in availableDrivers
+        const driver = availableDrivers.find(d => d.value === assignedDriver);
         return driver ? driver.label : 'Unknown Driver';
       },
     },
@@ -181,32 +252,51 @@ const Fleet = () => {
       ),
     },
     {
-      title: 'Mileage',
-      dataIndex: 'currentMileage',
-      key: 'currentMileage',
-      render: (mileage) => `${mileage || 0} km`,
+      title: 'Odometer',
+      dataIndex: 'currentOdometer',
+      key: 'currentOdometer',
+      render: (odometer) => `${odometer || 0} km`,
     },
     {
       title: 'Actions',
       key: 'actions',
+      fixed: 'right',
+      width: 150,
       render: (_, record) => (
-        <Space>
-          <Button
-            type="link"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-          >
-            Edit
-          </Button>
+        <Space size="small">
+          <Tooltip title="View Details">
+            <Button
+              type="link"
+              size="small"
+              icon={<EyeOutlined />}
+              onClick={() => handleView(record)}
+              style={{ padding: '4px 8px' }}
+            />
+          </Tooltip>
+          <Tooltip title="Edit">
+            <Button
+              type="link"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => handleEdit(record)}
+              style={{ padding: '4px 8px' }}
+            />
+          </Tooltip>
           <Popconfirm
             title="Are you sure you want to delete this vehicle?"
             onConfirm={() => handleDelete(record._id)}
             okText="Yes"
             cancelText="No"
           >
-            <Button type="link" danger icon={<DeleteOutlined />}>
-              Delete
-            </Button>
+            <Tooltip title="Delete">
+              <Button
+                type="link"
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+                style={{ padding: '4px 8px' }}
+              />
+            </Tooltip>
           </Popconfirm>
         </Space>
       ),
@@ -223,41 +313,61 @@ const Fleet = () => {
       </div>
 
       {/* Stats Cards */}
-      <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={6}>
-          <Card>
+      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+        <Col xs={12} sm={8} md={6} lg={4}>
+          <Card hoverable>
             <Statistic
-              title="Total Vehicles"
+              title="Total"
               value={stats.totalVehicles || 0}
               prefix={<CarOutlined />}
               valueStyle={{ color: '#1890ff' }}
             />
           </Card>
         </Col>
-        <Col span={6}>
-          <Card>
+        <Col xs={12} sm={8} md={6} lg={4}>
+          <Card hoverable>
             <Statistic
-              title="Active Vehicles"
+              title="Active"
               value={stats.activeVehicles || 0}
               valueStyle={{ color: '#52c41a' }}
             />
           </Card>
         </Col>
-        <Col span={6}>
-          <Card>
+        <Col xs={12} sm={8} md={6} lg={4}>
+          <Card hoverable>
             <Statistic
-              title="In Maintenance"
+              title="Maintenance"
               value={stats.maintenanceVehicles || 0}
               valueStyle={{ color: '#faad14' }}
             />
           </Card>
         </Col>
-        <Col span={6}>
-          <Card>
+        <Col xs={12} sm={8} md={6} lg={4}>
+          <Card hoverable>
             <Statistic
-              title="Service Required"
+              title="Breakdown"
+              value={stats.breakdownVehicles || 0}
+              valueStyle={{ color: '#ff4d4f' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={8} md={6} lg={4}>
+          <Card hoverable>
+            <Statistic
+              title="Service Due"
               value={stats.serviceDueVehicles || 0}
+              prefix={<ToolOutlined />}
               valueStyle={{ color: '#f5222d' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={8} md={6} lg={4}>
+          <Card hoverable>
+            <Statistic
+              title="Utilization"
+              value={stats.utilizationRate || 0}
+              suffix="%"
+              valueStyle={{ color: '#722ed1' }}
             />
           </Card>
         </Col>
@@ -285,12 +395,14 @@ const Fleet = () => {
           dataSource={vehicles}
           rowKey="_id"
           loading={loading}
+          scroll={{ x: 800 }}
           pagination={{
             pageSize: 10,
             showSizeChanger: true,
             showQuickJumper: true,
             showTotal: (total, range) =>
               `${range[0]}-${range[1]} of ${total} vehicles`,
+            pageSizeOptions: ['10', '20', '50', '100']
           }}
         />
       </Card>
@@ -336,12 +448,14 @@ const Fleet = () => {
                   { required: true, message: 'Please select vehicle type' },
                 ]}
               >
-                <Select>
+                <Select placeholder="Select vehicle type">
                   <Option value="truck">Truck</Option>
                   <Option value="van">Van</Option>
-                  <Option value="car">Car</Option>
-                  <Option value="motorcycle">Motorcycle</Option>
-                  <Option value="other">Other</Option>
+                  <Option value="pickup">Pickup</Option>
+                  <Option value="bike">Bike</Option>
+                  <Option value="auto">Auto</Option>
+                  <Option value="tempo">Tempo</Option>
+                  <Option value="container">Container</Option>
                 </Select>
               </Form.Item>
             </Col>
@@ -369,10 +483,19 @@ const Fleet = () => {
             <Col span={8}>
               <Form.Item
                 name="year"
-                label="Year"
-                rules={[{ required: true, message: 'Please enter year' }]}
+                label="Manufacturing Year"
+                rules={[
+                  { required: true, message: 'Please enter year' },
+                  {
+                    type: 'number',
+                    min: 1990,
+                    max: new Date().getFullYear() + 1,
+                    message: `Year must be between 1990 and ${new Date().getFullYear() + 1}`,
+                    transform: (value) => Number(value)
+                  }
+                ]}
               >
-                <Input type="number" placeholder="e.g., 2023" />
+                <Input type="number" placeholder="e.g., 2023" min="1990" max={new Date().getFullYear() + 1} />
               </Form.Item>
             </Col>
           </Row>
@@ -404,34 +527,65 @@ const Fleet = () => {
                 label="Status"
                 rules={[{ required: true, message: 'Please select status' }]}
               >
-                <Select>
+                <Select placeholder="Select status">
                   <Option value="active">Active</Option>
-                  <Option value="maintenance">Maintenance</Option>
-                  <Option value="out_of_service">Out of Service</Option>
-                  <Option value="retired">Retired</Option>
+                  <Option value="inactive">Inactive</Option>
+                  <Option value="maintenance">Under Maintenance</Option>
+                  <Option value="breakdown">Breakdown</Option>
+                  <Option value="sold">Sold</Option>
+                  <Option value="accident">Accident</Option>
                 </Select>
               </Form.Item>
             </Col>
           </Row>
 
           <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item name="currentMileage" label="Current Mileage (km)">
-                <Input type="number" placeholder="0" />
+            <Col span={6}>
+              <Form.Item
+                name="currentMileage"
+                label="Odometer Reading (km)"
+                rules={[
+                  {
+                    type: 'number',
+                    min: 0,
+                    message: 'Odometer reading must be positive',
+                    transform: (value) => Number(value)
+                  }
+                ]}
+              >
+                <Input type="number" placeholder="0" min="0" />
               </Form.Item>
             </Col>
-            <Col span={8}>
+            <Col span={6}>
+              <Form.Item
+                name="fuelEfficiency"
+                label="Fuel Efficiency (km/l)"
+                rules={[
+                  {
+                    type: 'number',
+                    min: 0,
+                    max: 100,
+                    message: 'Please enter valid fuel efficiency',
+                    transform: (value) => Number(value)
+                  }
+                ]}
+              >
+                <Input type="number" placeholder="15" step="0.1" min="0" max="100" />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
               <Form.Item name="registrationDate" label="Registration Date">
                 <DatePicker style={{ width: '100%' }} />
               </Form.Item>
             </Col>
-            <Col span={8}>
+            <Col span={6}>
               <Form.Item name="fuelType" label="Fuel Type">
-                <Select>
+                <Select placeholder="Select fuel type" allowClear>
                   <Option value="petrol">Petrol</Option>
                   <Option value="diesel">Diesel</Option>
                   <Option value="cng">CNG</Option>
                   <Option value="electric">Electric</Option>
+                  <Option value="hybrid">Hybrid</Option>
                 </Select>
               </Form.Item>
             </Col>
@@ -454,12 +608,140 @@ const Fleet = () => {
               >
                 Cancel
               </Button>
-              <Button type="primary" htmlType="submit">
+              <Button type="primary" htmlType="submit" loading={submitting}>
                 {editingVehicle ? 'Update Vehicle' : 'Add Vehicle'}
               </Button>
             </Space>
           </div>
         </Form>
+      </Modal>
+
+      {/* View Vehicle Modal */}
+      <Modal
+        title="Vehicle Details"
+        open={viewModalVisible}
+        onCancel={() => {
+          setViewModalVisible(false);
+          setViewingVehicle(null);
+        }}
+        footer={[
+          <Button key="close" onClick={() => {
+            setViewModalVisible(false);
+            setViewingVehicle(null);
+          }}>
+            Close
+          </Button>,
+          <Button
+            key="edit"
+            type="primary"
+            icon={<EditOutlined />}
+            onClick={() => {
+              setViewModalVisible(false);
+              handleEdit(viewingVehicle);
+            }}
+          >
+            Edit
+          </Button>
+        ]}
+        width={800}
+      >
+        {viewingVehicle && (
+          <>
+            <Descriptions bordered column={2}>
+              <Descriptions.Item label="Vehicle Number" span={1}>
+                {viewingVehicle.vehicleNumber}
+              </Descriptions.Item>
+              <Descriptions.Item label="Status" span={1}>
+                <Tag color={getStatusColor(viewingVehicle.status)}>
+                  {viewingVehicle.status?.replace('_', ' ').toUpperCase()}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Type" span={1}>
+                {viewingVehicle.vehicleType}
+              </Descriptions.Item>
+              <Descriptions.Item label="Make & Model" span={1}>
+                {viewingVehicle.make} {viewingVehicle.model}
+              </Descriptions.Item>
+              <Descriptions.Item label="Year" span={1}>
+                {viewingVehicle.year}
+              </Descriptions.Item>
+              <Descriptions.Item label="Fuel Type" span={1}>
+                {viewingVehicle.fuelType || 'N/A'}
+              </Descriptions.Item>
+              <Descriptions.Item label="Current Odometer" span={1}>
+                {viewingVehicle.currentOdometer || 0} km
+              </Descriptions.Item>
+              <Descriptions.Item label="Fuel Efficiency" span={1}>
+                {viewingVehicle.mileage?.value ? `${viewingVehicle.mileage.value} ${viewingVehicle.mileage.unit}` : 'N/A'}
+              </Descriptions.Item>
+              <Descriptions.Item label="Assigned Driver" span={2}>
+                {viewingVehicle.assignedDriver?.name || 'Unassigned'}
+                {viewingVehicle.assignedDriver?.email && ` (${viewingVehicle.assignedDriver.email})`}
+              </Descriptions.Item>
+              <Descriptions.Item label="Registration Date" span={1}>
+                {viewingVehicle.registrationDate
+                  ? dayjs(viewingVehicle.registrationDate).format('DD/MM/YYYY')
+                  : 'N/A'}
+              </Descriptions.Item>
+              <Descriptions.Item label="Condition" span={1}>
+                {viewingVehicle.condition || 'N/A'}
+              </Descriptions.Item>
+              {viewingVehicle.insurance?.expiryDate && (
+                <Descriptions.Item label="Insurance Expiry" span={1}>
+                  {dayjs(viewingVehicle.insurance.expiryDate).format('DD/MM/YYYY')}
+                </Descriptions.Item>
+              )}
+              {viewingVehicle.pollution?.expiryDate && (
+                <Descriptions.Item label="Pollution Cert Expiry" span={1}>
+                  {dayjs(viewingVehicle.pollution.expiryDate).format('DD/MM/YYYY')}
+                </Descriptions.Item>
+              )}
+              {viewingVehicle.notes && (
+                <Descriptions.Item label="Notes" span={2}>
+                  {viewingVehicle.notes}
+                </Descriptions.Item>
+              )}
+            </Descriptions>
+
+            {viewingVehicle.maintenanceHistory && viewingVehicle.maintenanceHistory.length > 0 && (
+              <>
+                <Divider />
+                <Title level={5}>Recent Maintenance History</Title>
+                <Table
+                  dataSource={viewingVehicle.maintenanceHistory.slice(0, 5)}
+                  columns={[
+                    {
+                      title: 'Date',
+                      dataIndex: 'serviceDate',
+                      render: (date) => dayjs(date).format('DD/MM/YYYY')
+                    },
+                    {
+                      title: 'Type',
+                      dataIndex: 'maintenanceType'
+                    },
+                    {
+                      title: 'Cost',
+                      dataIndex: 'cost',
+                      render: (cost) => `₹${cost || 0}`
+                    },
+                    {
+                      title: 'Status',
+                      dataIndex: 'status',
+                      render: (status) => (
+                        <Tag color={status === 'completed' ? 'green' : 'orange'}>
+                          {status?.toUpperCase()}
+                        </Tag>
+                      )
+                    }
+                  ]}
+                  rowKey="_id"
+                  pagination={false}
+                  size="small"
+                />
+              </>
+            )}
+          </>
+        )}
       </Modal>
     </div>
   );

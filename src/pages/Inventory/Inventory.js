@@ -58,18 +58,6 @@ const Inventory = () => {
     fetchWarehouses();
   }, [pagination.current, pagination.pageSize, searchText, statusFilter]);
 
-  // Test function to check API connectivity
-  const testInventoryAPI = async () => {
-    try {
-      console.log('Testing inventory API...');
-      const response = await inventoryAPI.getInventory({ page: 1, limit: 10 });
-      console.log('API Test Response:', response);
-      message.success('API is working! Check console for details.');
-    } catch (error) {
-      console.error('API Test Error:', error);
-      message.error(`API Error: ${error.response?.status} ${error.response?.statusText}`);
-    }
-  };
 
   const fetchInventory = async () => {
     setLoading(true);
@@ -844,12 +832,6 @@ const Inventory = () => {
             <Col>
               <Space>
                 <Button
-                  onClick={testInventoryAPI}
-                  style={{ backgroundColor: '#f0f0f0' }}
-                >
-                  Test API
-                </Button>
-                <Button
                   onClick={() => {
                     console.log('Manual refresh triggered');
                     setPagination(prev => ({ ...prev, current: 1 })); // Reset to page 1
@@ -857,40 +839,6 @@ const Inventory = () => {
                   }}
                 >
                   Refresh
-                </Button>
-                <Button
-                  onClick={() => {
-                    console.log('=== DEBUG DATA ===');
-                    console.log('Current inventory data:', inventory);
-                    console.log('Current products data:', products);
-                    console.log('Current warehouses data:', warehouses);
-                    console.log('Inventory length:', inventory?.length);
-                    console.log('Products length:', products?.length);
-                    console.log('Warehouses length:', warehouses?.length);
-                    if (inventory.length > 0) {
-                      console.log('First inventory item:', inventory[0]);
-                    }
-                  }}
-                  style={{ backgroundColor: '#fff2e8' }}
-                >
-                  Debug Data
-                </Button>
-                <Button
-                  onClick={async () => {
-                    try {
-                      console.log('Creating default warehouses...');
-                      const response = await debugAPI.createDefaultWarehouses();
-                      console.log('Warehouse creation response:', response.data);
-                      message.success(`Created ${response.data.data.created.length} warehouses`);
-                      await fetchWarehouses(); // Refresh warehouses
-                    } catch (error) {
-                      console.error('Error creating warehouses:', error);
-                      message.error('Failed to create warehouses: ' + (error.response?.data?.message || error.message));
-                    }
-                  }}
-                  style={{ backgroundColor: '#e6f7ff' }}
-                >
-                  Create Warehouses
                 </Button>
                 <Button
                   type="primary"
