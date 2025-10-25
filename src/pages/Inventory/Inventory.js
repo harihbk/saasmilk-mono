@@ -733,7 +733,7 @@ const Inventory = () => {
   return (
     <div>
       <div style={{ marginBottom: 24 }}>
-        <Title level={2}>Inventory Management</Title>
+        <Title level={2}>Stock Management</Title>
         <div style={{ fontSize: '14px', color: '#666', marginBottom: 8 }}>
           <strong>Current Items:</strong> {inventory.length} | 
           <strong>Loading:</strong> {loading ? 'Yes' : 'No'} |
@@ -810,7 +810,7 @@ const Inventory = () => {
             <Col flex="auto">
               <Space>
                 <Input.Search
-                  placeholder="Search inventory..."
+                  placeholder="Search stock..."
                   allowClear
                   onSearch={handleSearch}
                   style={{ width: 300 }}
@@ -845,7 +845,7 @@ const Inventory = () => {
                   icon={<PlusOutlined />}
                   onClick={() => showModal()}
                 >
-                  Add Inventory Item
+                  Add Stock Item
                 </Button>
               </Space>
             </Col>
@@ -866,7 +866,7 @@ const Inventory = () => {
 
       {/* Inventory Modal */}
       <Modal
-        title={editingItem ? 'Edit Inventory Item' : 'Add Inventory Item'}
+        title={editingItem ? 'Edit Stock Item' : 'Add Stock Item'}
         open={modalVisible}
         onCancel={handleModalCancel}
         footer={null}
