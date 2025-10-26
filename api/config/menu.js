@@ -134,7 +134,7 @@ const menuConfig = {
     },
     {
       id: 'inventory',
-      title: 'Inventorysss',
+      title: 'Inventory',
       icon: 'archive',
       route: '/inventory',
       permissions: ['inventory.read'],
