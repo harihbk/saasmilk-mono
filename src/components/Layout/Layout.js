@@ -80,7 +80,7 @@ const Layout = () => {
       {
         key: '/inventory',
         icon: <InboxOutlined />,
-        label: 'Inventory',
+        label: 'Stocks',
       },
       {
         key: '/fleet',

@@ -123,7 +123,7 @@ const Products = () => {
       minStock: 20,
       maxStock: 500,
       unit: 'bottle',
-      expiryDate: dayjs().add(7, 'days').toDate(),
+      // expiryDate: dayjs().add(7, 'days').toDate(),
       createdAt: new Date(),
     },
     {
@@ -140,7 +140,7 @@ const Products = () => {
       minStock: 15,
       maxStock: 200,
       unit: 'container',
-      expiryDate: dayjs().add(5, 'days').toDate(),
+      // expiryDate: dayjs().add(5, 'days').toDate(),
       createdAt: new Date(),
     },
     {
@@ -157,7 +157,7 @@ const Products = () => {
       minStock: 10,
       maxStock: 100,
       unit: 'block',
-      expiryDate: dayjs().add(30, 'days').toDate(),
+      // expiryDate: dayjs().add(30, 'days').toDate(),
       createdAt: new Date(),
     },
   ];
@@ -240,10 +240,10 @@ const Products = () => {
         packagingSize: product.packaging?.size?.value,
         packagingUnit: product.packaging?.size?.unit,
         status: product.status,
-        minStockLevel: product.minStockLevel,
-        maxStockLevel: product.maxStockLevel,
+        // minStockLevel: product.minStockLevel,
+        // maxStockLevel: product.maxStockLevel,
         isOrganic: product.isOrganic,
-        expiryDate: product.expiryDate ? dayjs(product.expiryDate) : null,
+        // expiryDate: product.expiryDate ? dayjs(product.expiryDate) : null,
       });
     } else {
       form.resetFields();
@@ -290,10 +290,10 @@ const Products = () => {
         },
         supplier: '507f1f77bcf86cd799439011', // Mock supplier ID for now
         status: values.status || 'active',
-        minStockLevel: values.minStockLevel || 10,
-        maxStockLevel: values.maxStockLevel || 1000,
+        // minStockLevel: values.minStockLevel || 10,
+        // maxStockLevel: values.maxStockLevel || 1000,
         isOrganic: values.isOrganic || false,
-        expiryDate: values.expiryDate ? values.expiryDate.toDate() : null,
+        // expiryDate: values.expiryDate ? values.expiryDate.toDate() : null,
         createdBy: '507f1f77bcf86cd799439012' // Mock user ID for now
       };
 
@@ -444,12 +444,12 @@ const Products = () => {
         </Tag>
       ),
     },
-    {
-      title: 'Expiry',
-      dataIndex: 'expiryDate',
-      key: 'expiryDate',
-      render: (date) => date ? dayjs(date).format('MMM DD, YYYY') : 'N/A',
-    },
+    // {
+    //   title: 'Expiry',
+    //   dataIndex: 'expiryDate',
+    //   key: 'expiryDate',
+    //   render: (date) => date ? dayjs(date).format('MMM DD, YYYY') : 'N/A',
+    // },
     {
       title: 'Actions',
       key: 'actions',
@@ -953,7 +953,7 @@ const Products = () => {
 
           {/* Stock Information */}
           <Row gutter={16}>
-            <Col span={8}>
+            {/* <Col span={8}>
               <Form.Item
                 name="minStockLevel"
                 label="Minimum Stock Level"
@@ -978,7 +978,7 @@ const Products = () => {
                   placeholder="1000"
                 />
               </Form.Item>
-            </Col>
+            </Col> */}
             <Col span={8}>
               <Form.Item
                 name="barcode"
@@ -989,12 +989,12 @@ const Products = () => {
             </Col>
           </Row>
 
-          <Form.Item
+          {/* <Form.Item
             name="expiryDate"
             label="Expiry Date"
           >
             <DatePicker style={{ width: '100%' }} />
-          </Form.Item>
+          </Form.Item> */}
 
           <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
             <Space>
