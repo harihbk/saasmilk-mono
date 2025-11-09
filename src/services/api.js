@@ -175,7 +175,13 @@ export const inventoryAPI = {
   getAlerts: (params) => api.get('/inventory/meta/alerts', { params }),
   acknowledgeAlert: (id, alertId) => api.put(`/inventory/${id}/alerts/${alertId}/acknowledge`),
 };
-
+export const newInventoryAPI = {
+  getMeta: () => api.get('/new-inventory/meta'),
+  create: (data) => api.post('/new-inventory', data),
+  getList: (params) => api.get('/new-inventory', { params }),
+  update: (id, data) => api.put(`/new-inventory/${id}`, data),
+  delete: (id) => api.delete(`/new-inventory/${id}`),
+};
 export const settingsInventoryAPI = {
   getSettingsInventory: (params) => api.get('/settings_inventory', { params }),
   getSettingsInventoryById: (id) => api.get(`/settings_inventory/${id}`),

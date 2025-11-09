@@ -744,7 +744,7 @@ const Inventory = () => {
       {/* Alerts */}
       {inventory.length > 0 && (
         <Alert
-          message="Inventory Alerts"
+          message="Stock Alerts"
           description={`${inventory.filter(item => getInventoryStatus(item) === 'critical' || getInventoryStatus(item) === 'out_of_stock').length} critical alerts, ${inventory.filter(item => {
             const currentBatch = getCurrentBatch(item.batches);
             return currentBatch?.expiryDate && dayjs(currentBatch.expiryDate).diff(dayjs(), 'days') <= 7;
@@ -945,7 +945,7 @@ const Inventory = () => {
                 <InputNumber min={0} style={{ width: '100%' }} placeholder="0" />
               </Form.Item>
             </Col>
-            <Col span={8}>
+            {/* <Col span={8}>
               <Form.Item
                 name="averageCost"
                 label="Cost Price (₹)"
@@ -962,10 +962,10 @@ const Inventory = () => {
               >
                 <InputNumber min={0} step={0.01} style={{ width: '100%' }} placeholder="0.00" />
               </Form.Item>
-            </Col>
+            </Col> */}
           </Row>
           
-          <Row gutter={16}>
+          {/* <Row gutter={16}>
             <Col span={8}>
               <Form.Item
                 name="igst"
@@ -993,7 +993,7 @@ const Inventory = () => {
                 <InputNumber min={0} max={100} style={{ width: '100%' }} placeholder="0" disabled />
               </Form.Item>
             </Col>
-          </Row>
+          </Row> */}
 
           <Row gutter={16}>
             <Col span={8}>

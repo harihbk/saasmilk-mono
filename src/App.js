@@ -15,6 +15,7 @@ import Orders from './pages/Orders/Orders';
 import Customers from './pages/Customers/Customers';
 import Suppliers from './pages/Suppliers/Suppliers';
 import Inventory from './pages/Inventory/Inventory';
+import NewInventory from './pages/NewInventory/NewInventory';
 import Users from './pages/Users/Users';
 import Settings from './pages/Settings/Settings';
 import Profile from './pages/Profile/Profile';
@@ -101,6 +102,7 @@ function AppRoutes() {
         <Route path="customers" element={<Customers />} />
         <Route path="suppliers" element={<Suppliers />} />
         <Route path="inventory" element={<Inventory />} />
+        <Route path="newinventory" element={<NewInventory />} />
         <Route path="procurement" element={<Procurement />} />
         <Route path="procurement/create" element={<TallyStyleProcurement />} />
         <Route path="procurement/analytics" element={<Procurement />} />
