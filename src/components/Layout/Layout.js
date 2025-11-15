@@ -156,13 +156,13 @@ const Layout = () => {
     }
 
     // Add company management for company admins and super admins
-    if (user?.role === 'super_admin' || user?.role === 'company_admin') {
-      baseItems.splice(-1, 0, {
-        key: '/companies',
-        icon: <ShopOutlined />,
-        label: 'Company Management',
-      });
-    }
+    // if (user?.role === 'super_admin' || user?.role === 'company_admin') {
+    //   baseItems.splice(-1, 0, {
+    //     key: '/companies',
+    //     icon: <ShopOutlined />,
+    //     label: 'Company Management',
+    //   });
+    // }
 
     return baseItems;
   };

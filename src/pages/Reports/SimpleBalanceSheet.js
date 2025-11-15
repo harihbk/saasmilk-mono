@@ -232,13 +232,13 @@ const SimpleBalanceSheet = () => {
       </Card>
       
       {/* Debug Info */}
-      <Card title="Debug Info" style={{ marginTop: 24, background: '#f5f5f5' }}>
+      {/* <Card title="Debug Info" style={{ marginTop: 24, background: '#f5f5f5' }}>
         <p><strong>Token:</strong> {getToken() ? 'Present' : 'Missing'}</p>
         <p><strong>Dealers Loaded:</strong> {dealers.length}</p>
         <p><strong>Selected Dealer:</strong> {selectedDealer || 'None'}</p>
         <p><strong>Data Entries:</strong> {data.length}</p>
         <p><strong>Loading:</strong> {loading ? 'Yes' : 'No'}</p>
-      </Card>
+      </Card> */}
     </div>
   );
 };
