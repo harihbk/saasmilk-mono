@@ -15,6 +15,8 @@ import Orders from './pages/Orders/Orders';
 import Customers from './pages/Customers/Customers';
 import Suppliers from './pages/Suppliers/Suppliers';
 import Inventory from './pages/Inventory/Inventory';
+import InventoryManagement from './pages/Inventorystock/InventoryManagement';
+
 import Users from './pages/Users/Users';
 import Settings from './pages/Settings/Settings';
 import Profile from './pages/Profile/Profile';
@@ -29,6 +31,8 @@ import Companies from './pages/Companies/Companies';
 import SaasAdminDashboard from './pages/SaasAdmin/SaasAdminDashboard';
 import SaasAdminLogin from './pages/SaasAdmin/SaasAdminLogin';
 import Fleet from './pages/Fleet/Fleet';
+import Assets from './pages/Assets/Assets';
+import GatePass from './pages/GatePass/GatePass';
 import FleetMaintenance from './pages/FleetMaintenance/FleetMaintenance';
 import Procurement from './pages/Procurement/Procurement';
 import TallyStyleProcurement from './pages/Procurement/TallyStyleProcurement';
@@ -43,11 +47,11 @@ const theme = {
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
-  
+
   if (loading) {
     return <div>Loading...</div>;
   }
-  
+
   return user ? children : <Navigate to="/login" />;
 };
 
@@ -63,11 +67,11 @@ const PublicRoute = ({ children }) => {
 
 const SaasProtectedRoute = ({ children }) => {
   const token = localStorage.getItem('saas_admin_token');
-  
+
   if (!token) {
     return <Navigate to="/saas-admin/login" />;
   }
-  
+
   return children;
 };
 
@@ -94,18 +98,22 @@ function AppRoutes() {
           <Layout />
         </ProtectedRoute>
       }>
-  <Route index element={<Navigate to="/dashboard" replace />} />
-  <Route path="dashboard" element={<Dashboard />} />
+        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route path="dashboard" element={<Dashboard />} />
         <Route path="products" element={<Products />} />
         <Route path="orders" element={<Orders />} />
         <Route path="customers" element={<Customers />} />
         <Route path="suppliers" element={<Suppliers />} />
         <Route path="inventory" element={<Inventory />} />
+        <Route path="inventorystock" element={<InventoryManagement />} />
+
         <Route path="procurement" element={<Procurement />} />
         <Route path="procurement/create" element={<TallyStyleProcurement />} />
         <Route path="procurement/analytics" element={<Procurement />} />
         <Route path="fleet" element={<Fleet />} />
         <Route path="fleet-maintenance" element={<FleetMaintenance />} />
+        <Route path="assets" element={<Assets />} />
+        <Route path="gate-passes" element={<GatePass />} />
         <Route path="users" element={<Users />} />
         <Route path="settings" element={<Settings />} />
         <Route path="profile" element={<Profile />} />
@@ -118,7 +126,7 @@ function AppRoutes() {
         <Route path="tenant-management" element={<TenantManagement />} />
         <Route path="companies" element={<CompanyManagement />} />
       </Route>
-      
+
       {/* SaaS Admin Routes - Separate Layout */}
       <Route path="/saas-admin/login" element={<SaasAdminLogin />} />
       <Route path="/saas-admin/*" element={

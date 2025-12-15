@@ -109,18 +109,30 @@ const Fleet = () => {
       const vehicleData = {
         ...values,
         registrationDate: values.registrationDate?.toDate(),
-        // Convert currentMileage to currentOdometer for backend
         currentOdometer: parseInt(values.currentMileage) || 0,
-        // Add mileage field with value and unit if provided
         mileage: values.fuelEfficiency ? {
           value: parseFloat(values.fuelEfficiency),
           unit: 'kmpl'
         } : undefined,
+        // Map Insurance
+        insurance: {
+          expiryDate: values.insuranceExpiry?.toDate(),
+          policyNumber: values.policyNumber
+        },
+        // Map Lease Details
+        leaseDetails: values.ownership === 'leased' ? {
+          startDate: values.leaseStart?.toDate(),
+          endDate: values.leaseEnd?.toDate(),
+        } : undefined
       };
 
-      // Remove frontend-only fields
+      // Remove flattened fields
       delete vehicleData.currentMileage;
       delete vehicleData.fuelEfficiency;
+      delete vehicleData.insuranceExpiry;
+      delete vehicleData.policyNumber;
+      delete vehicleData.leaseStart;
+      delete vehicleData.leaseEnd;
 
       if (editingVehicle) {
         await fleetAPI.updateVehicle(editingVehicle._id, vehicleData);
@@ -159,23 +171,25 @@ const Fleet = () => {
 
   const handleEdit = (vehicle) => {
     setEditingVehicle(vehicle);
-    // Prepare form values with proper field mapping
     const formValues = {
       vehicleNumber: vehicle.vehicleNumber,
       vehicleType: vehicle.vehicleType,
+      ownership: vehicle.ownership || 'owned',
       make: vehicle.make,
       model: vehicle.model,
       year: vehicle.year,
       status: vehicle.status,
       fuelType: vehicle.fuelType,
       notes: vehicle.notes,
-      // Map assignedDriver - handle both string ID and object formats
       assignedDriver: vehicle.assignedDriver?._id || vehicle.assignedDriver || undefined,
-      // Map date fields
       registrationDate: vehicle.registrationDate ? dayjs(vehicle.registrationDate) : null,
-      // Map backend fields to frontend fields
       currentMileage: vehicle.currentOdometer || 0,
       fuelEfficiency: vehicle.mileage?.value || null,
+      // New fields
+      insuranceExpiry: vehicle.insurance?.expiryDate ? dayjs(vehicle.insurance.expiryDate) : null,
+      policyNumber: vehicle.insurance?.policyNumber || '',
+      leaseStart: vehicle.leaseDetails?.startDate ? dayjs(vehicle.leaseDetails.startDate) : null,
+      leaseEnd: vehicle.leaseDetails?.endDate ? dayjs(vehicle.leaseDetails.endDate) : null,
     };
     form.setFieldsValue(formValues);
     setModalVisible(true);
@@ -227,19 +241,42 @@ const Fleet = () => {
       render: (type) => <Tag color="blue">{type}</Tag>,
     },
     {
+      title: 'Ownership',
+      dataIndex: 'ownership',
+      key: 'ownership',
+      render: (val) => <Tag color="cyan">{val ? val.toUpperCase() : 'OWNED'}</Tag>
+    },
+    {
       title: 'Driver',
       dataIndex: 'assignedDriver',
       key: 'assignedDriver',
       render: (assignedDriver) => {
         if (!assignedDriver) return 'Unassigned';
-        // Handle both object (populated) and string (ID only) formats
         if (typeof assignedDriver === 'object') {
           return assignedDriver.name || assignedDriver.email || 'Unknown Driver';
         }
-        // If it's just an ID string, try to find it in availableDrivers
         const driver = availableDrivers.find(d => d.value === assignedDriver);
         return driver ? driver.label : 'Unknown Driver';
       },
+    },
+    {
+      title: 'Insurance Exp.',
+      dataIndex: ['insurance', 'expiryDate'],
+      key: 'insuranceExpiry',
+      render: (date) => {
+        if (!date) return <Tag color="default">N/A</Tag>;
+        const exp = dayjs(date);
+        const daysLeft = exp.diff(dayjs(), 'day');
+        let color = 'green';
+        if (daysLeft < 0) color = 'red';
+        else if (daysLeft < 30) color = 'orange';
+
+        return (
+          <Tooltip title={`${daysLeft} days remaining`}>
+            <Tag color={color}>{exp.format('DD/MM/YYYY')}</Tag>
+          </Tooltip>
+        );
+      }
     },
     {
       title: 'Status',
@@ -426,10 +463,11 @@ const Fleet = () => {
           initialValues={{
             status: 'active',
             vehicleType: 'truck',
+            ownership: 'owned'
           }}
         >
           <Row gutter={16}>
-            <Col span={12}>
+            <Col span={8}>
               <Form.Item
                 name="vehicleNumber"
                 label="Vehicle Number"
@@ -440,7 +478,7 @@ const Fleet = () => {
                 <Input placeholder="e.g., MH01AB1234" />
               </Form.Item>
             </Col>
-            <Col span={12}>
+            <Col span={8}>
               <Form.Item
                 name="vehicleType"
                 label="Vehicle Type"
@@ -448,7 +486,7 @@ const Fleet = () => {
                   { required: true, message: 'Please select vehicle type' },
                 ]}
               >
-                <Select placeholder="Select vehicle type">
+                <Select placeholder="Select type">
                   <Option value="truck">Truck</Option>
                   <Option value="van">Van</Option>
                   <Option value="pickup">Pickup</Option>
@@ -456,6 +494,20 @@ const Fleet = () => {
                   <Option value="auto">Auto</Option>
                   <Option value="tempo">Tempo</Option>
                   <Option value="container">Container</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                name="ownership"
+                label="Ownership"
+                rules={[{ required: true, message: 'Select ownership' }]}
+              >
+                <Select placeholder="Ownership">
+                  <Option value="owned">Owned</Option>
+                  <Option value="contract">Contract</Option>
+                  <Option value="leased">Leased</Option>
+                  <Option value="rented">Rented</Option>
                 </Select>
               </Form.Item>
             </Col>
@@ -543,12 +595,12 @@ const Fleet = () => {
             <Col span={6}>
               <Form.Item
                 name="currentMileage"
-                label="Odometer Reading (km)"
+                label="Odometer (km)"
                 rules={[
                   {
                     type: 'number',
                     min: 0,
-                    message: 'Odometer reading must be positive',
+                    message: 'Must be positive',
                     transform: (value) => Number(value)
                   }
                 ]}
@@ -559,13 +611,13 @@ const Fleet = () => {
             <Col span={6}>
               <Form.Item
                 name="fuelEfficiency"
-                label="Fuel Efficiency (km/l)"
+                label="Fuel Eff. (km/l)"
                 rules={[
                   {
                     type: 'number',
                     min: 0,
                     max: 100,
-                    message: 'Please enter valid fuel efficiency',
+                    message: 'Invalid input',
                     transform: (value) => Number(value)
                   }
                 ]}
@@ -580,7 +632,7 @@ const Fleet = () => {
             </Col>
             <Col span={6}>
               <Form.Item name="fuelType" label="Fuel Type">
-                <Select placeholder="Select fuel type" allowClear>
+                <Select placeholder="Select fuel" allowClear>
                   <Option value="petrol">Petrol</Option>
                   <Option value="diesel">Diesel</Option>
                   <Option value="cng">CNG</Option>
@@ -590,6 +642,51 @@ const Fleet = () => {
               </Form.Item>
             </Col>
           </Row>
+
+          <Divider orientation="left">Compliance & Ownership Details</Divider>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="policyNumber" label="Insurance Policy No">
+                <Input placeholder="Policy Number" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="insuranceExpiry" label="Insurance Expiry Date">
+                <DatePicker style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Form.Item
+            noStyle
+            shouldUpdate={(prevValues, currentValues) => prevValues.ownership !== currentValues.ownership}
+          >
+            {({ getFieldValue }) =>
+              getFieldValue('ownership') === 'leased' ? (
+                <Row gutter={16} style={{ background: '#f9f9f9', padding: '10px', borderRadius: '4px', marginBottom: '16px' }}>
+                  <Col span={12}>
+                    <Form.Item
+                      name="leaseStart"
+                      label="Lease Start Date"
+                      rules={[{ required: true, message: 'Required for leased vehicles' }]}
+                    >
+                      <DatePicker style={{ width: '100%' }} />
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item
+                      name="leaseEnd"
+                      label="Lease End Date"
+                      rules={[{ required: true, message: 'Required for leased vehicles' }]}
+                    >
+                      <DatePicker style={{ width: '100%' }} />
+                    </Form.Item>
+                  </Col>
+                </Row>
+              ) : null
+            }
+          </Form.Item>
 
           <Form.Item name="notes" label="Notes">
             <Input.TextArea rows={3} placeholder="Additional notes..." />
@@ -651,6 +748,9 @@ const Fleet = () => {
               <Descriptions.Item label="Vehicle Number" span={1}>
                 {viewingVehicle.vehicleNumber}
               </Descriptions.Item>
+              <Descriptions.Item label="Ownership" span={1}>
+                <Tag color="cyan">{(viewingVehicle.ownership || 'owned').toUpperCase()}</Tag>
+              </Descriptions.Item>
               <Descriptions.Item label="Status" span={1}>
                 <Tag color={getStatusColor(viewingVehicle.status)}>
                   {viewingVehicle.status?.replace('_', ' ').toUpperCase()}
@@ -667,8 +767,7 @@ const Fleet = () => {
               </Descriptions.Item>
               <Descriptions.Item label="Fuel Type" span={1}>
                 {viewingVehicle.fuelType || 'N/A'}
-              </Descriptions.Item>
-              <Descriptions.Item label="Current Odometer" span={1}>
+              </Descriptions.Item>              <Descriptions.Item label="Current Odometer" span={1}>
                 {viewingVehicle.currentOdometer || 0} km
               </Descriptions.Item>
               <Descriptions.Item label="Fuel Efficiency" span={1}>

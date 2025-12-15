@@ -22,8 +22,8 @@ import {
   BellOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  BarChartOutlined, 
-  HistoryOutlined, 
+  BarChartOutlined,
+  HistoryOutlined,
   FileTextOutlined,
   PlusOutlined,
   ClockCircleOutlined,
@@ -83,6 +83,11 @@ const Layout = () => {
         label: 'Stocks',
       },
       {
+        key: '/inventorystock',
+        icon: <InboxOutlined />,
+        label: 'Inventory Management',
+      },
+      {
         key: '/fleet',
         icon: <CarOutlined />,
         label: 'Fleet',
@@ -91,6 +96,23 @@ const Layout = () => {
         key: '/fleet-maintenance',
         icon: <ToolOutlined />,
         label: 'Fleet Maintenance',
+      },
+      {
+        key: 'assets-management',
+        icon: <InboxOutlined />,
+        label: 'Asset Management',
+        children: [
+          {
+            key: '/assets',
+            icon: <InboxOutlined />,
+            label: 'Assets',
+          },
+          {
+            key: '/gate-passes',
+            icon: <FileTextOutlined />,
+            label: 'Gate Passes',
+          },
+        ]
       },
       {
         key: '/users',

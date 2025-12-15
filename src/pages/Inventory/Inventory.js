@@ -945,7 +945,7 @@ const Inventory = () => {
                 <InputNumber min={0} style={{ width: '100%' }} placeholder="0" />
               </Form.Item>
             </Col>
-            <Col span={8}>
+            {/* <Col span={8}>
               <Form.Item
                 name="averageCost"
                 label="Cost Price (₹)"
@@ -962,10 +962,10 @@ const Inventory = () => {
               >
                 <InputNumber min={0} step={0.01} style={{ width: '100%' }} placeholder="0.00" />
               </Form.Item>
-            </Col>
+            </Col> */}
           </Row>
           
-          <Row gutter={16}>
+          {/* <Row gutter={16}>
             <Col span={8}>
               <Form.Item
                 name="igst"
@@ -993,7 +993,7 @@ const Inventory = () => {
                 <InputNumber min={0} max={100} style={{ width: '100%' }} placeholder="0" disabled />
               </Form.Item>
             </Col>
-          </Row>
+          </Row> */}
 
           <Row gutter={16}>
             <Col span={8}>

@@ -18,24 +18,24 @@ api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
     const tenantId = localStorage.getItem('tenantId');
-    
+
     console.log('API Request Interceptor:', {
       url: config.url,
       method: config.method,
       token: token ? 'Present' : 'Missing',
       tenantId: tenantId || 'Missing'
     });
-    
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    
+
     if (tenantId) {
       config.headers['x-tenant-id'] = tenantId;
     }
-    
+
     return config;
-  }, 
+  },
   (error) => {
     console.error('API Request Error:', error);
     return Promise.reject(error);
@@ -58,7 +58,7 @@ api.interceptors.response.use(
       status: error.response?.status,
       message: error.response?.data?.message || error.message
     });
-    
+
     if (error.response?.status === 401) {
       console.warn('Authentication failed - clearing credentials');
       localStorage.removeItem('token');
@@ -176,13 +176,13 @@ export const inventoryAPI = {
   acknowledgeAlert: (id, alertId) => api.put(`/inventory/${id}/alerts/${alertId}/acknowledge`),
 };
 
-export const settingsInventoryAPI = {
-  getSettingsInventory: (params) => api.get('/settings_inventory', { params }),
-  getSettingsInventoryById: (id) => api.get(`/settings_inventory/${id}`),
-  createSettingsInventory: (data) => api.post('/settings_inventory', data),
-  updateSettingsInventory: (id, data) => api.put(`/settings_inventory/${id}`, data),
-  deleteSettingsInventory: (id) => api.delete(`/settings_inventory/${id}`),
-  getActiveInventory: () => api.get('/settings_inventory/meta/active'),
+export const subCategoriesAPI = {
+  getSubCategories: (params) => api.get('/subcategories', { params }),
+  getSubCategory: (id) => api.get(`/subcategories/${id}`),
+  createSubCategory: (data) => api.post('/subcategories', data),
+  updateSubCategory: (id, data) => api.put(`/subcategories/${id}`, data),
+  deleteSubCategory: (id) => api.delete(`/subcategories/${id}`),
+  getActiveSubCategories: (params) => api.get('/subcategories/meta/active', { params }),
 };
 
 
@@ -203,7 +203,7 @@ export const dealerGroupsAPI = {
   deleteDealerGroup: (id) => api.delete(`/dealer-groups/${id}`),
   getActiveDealerGroups: () => api.get('/dealer-groups/meta/active'),
   getDealerGroupStats: () => api.get('/dealer-groups/meta/stats'),
-  
+
   // Pricing endpoints
   getDealerGroupPricing: (id, params) => api.get(`/dealer-groups/${id}/pricing`, { params }),
   setDealerGroupPricing: (id, data) => api.post(`/dealer-groups/${id}/pricing`, data),
@@ -224,6 +224,13 @@ export const dealersAPI = {
   getDealersByGroup: (groupId, params) => api.get(`/dealers/group/${groupId}`, { params }),
   getDealerStats: () => api.get('/dealers/meta/stats'),
   getDealerBalanceSheet: (id, params) => api.get(`/dealers/${id}/balance-sheet`, { params }),
+
+  // Dealer Pricing Endpoints - Specific to individual dealers
+  getDealerPricing: (id, params) => api.get(`/dealers/${id}/pricing`, { params }),
+  setDealerPricing: (id, data) => api.post(`/dealers/${id}/pricing`, data),
+  updateDealerPricing: (dealerId, pricingId, data) => api.put(`/dealers/${dealerId}/pricing/${pricingId}`, data),
+  deleteDealerPricing: (dealerId, pricingId) => api.delete(`/dealers/${dealerId}/pricing/${pricingId}`),
+  bulkUpdateDealerPricing: (id, data) => api.post(`/dealers/${id}/pricing/bulk`, data),
 };
 
 export const warehousesAPI = {
@@ -240,27 +247,27 @@ export const warehousesAPI = {
 export const billingAPI = {
   // Get all billing records (super admin only)
   getBillings: (params) => api.get('/billing', { params }),
-  
+
   // Get billing for specific tenant
   getBilling: (tenantId) => api.get(`/billing/${tenantId}`),
-  
+
   // Create billing record
   createBilling: (data) => api.post('/billing', data),
-  
+
   // Update billing/subscription
   updateBilling: (tenantId, data) => api.put(`/billing/${tenantId}`, data),
-  
+
   // Usage management
   updateUsage: (tenantId, data) => api.post(`/billing/${tenantId}/usage`, data),
   getUsage: (tenantId) => api.get(`/billing/${tenantId}/usage`),
-  
+
   // Invoice management
   createInvoice: (tenantId, data) => api.post(`/billing/${tenantId}/invoices`, data),
   getInvoices: (tenantId) => api.get(`/billing/${tenantId}/invoices`),
-  
+
   // Payment processing
   processPayment: (tenantId, data) => api.post(`/billing/${tenantId}/payments`, data),
-  
+
   // Dashboard stats (super admin only)
   getDashboardStats: () => api.get('/billing/dashboard/stats'),
 };
@@ -299,7 +306,7 @@ saasApi.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
-  }, 
+  },
   (error) => {
     return Promise.reject(error);
   }
@@ -327,7 +334,7 @@ export const saasAdminAPI = {
   getStats: () => saasApi.get('/saas-admin/stats'),
   getCompanies: (params) => saasApi.get('/saas-admin/companies', { params }),
   suspendCompany: (id, data) => saasApi.patch(`/saas-admin/companies/${id}/suspend`, data),
-  
+
   // Tenant Management APIs
   getTenants: (params) => saasApi.get('/saas-admin/tenants', { params }),
   getTenant: (id) => saasApi.get(`/saas-admin/tenants/${id}`),
@@ -359,4 +366,47 @@ export const fleetMaintenanceAPI = {
   deleteMaintenanceRecord: (id) => api.delete(`/fleet-maintenance/${id}`),
   getStats: () => api.get('/fleet-maintenance/meta/stats'),
   getUpcomingMaintenance: () => api.get('/fleet-maintenance/meta/upcoming'),
+};
+
+
+// Inventory Stock API
+export const inventoryStockAPI = {
+  // Get all inventory items (with pagination, search, filters)
+  getInventory: (params) => api.get('/inventorystock', { params }),
+
+  // Get single inventory item
+  getInventoryItem: (id) => api.get(`/inventorystock/${id}`),
+
+  // CRUD
+  createInventoryItem: (data) => api.post('/inventorystock', data),
+  updateInventoryItem: (id, data) => api.put(`/inventorystock/${id}`, data),
+  deleteInventoryItem: (id) => api.delete(`/inventorystock/${id}`),
+  // Stock movements
+  purchaseStock: (id, data) => api.post(`/inventorystock/${id}/purchase`, data),
+  consumeStock: (id, data) => api.post(`/inventorystock/${id}/consume`, data),
+  // Optional aliases (if you prefer purchase/consume naming)
+  purchase: (id, data) => api.post(`/inventorystock/${id}/purchase`, data),
+  consume: (id, data) => api.post(`/inventorystock/${id}/consume`, data),
+  // Alerts (future use)
+  getLowStockAlerts: (params) => api.get('/inventorystock/meta/alerts', { params }),
+};
+
+
+export const autoStockAPI = {
+
+};
+
+export const assetsAPI = {
+  getAssets: (params) => api.get('/assets', { params }),
+  createAsset: (data) => api.post('/assets', data),
+  updateAsset: (id, data) => api.put(`/assets/${id}`, data),
+  deleteAsset: (id) => api.delete(`/assets/${id}`),
+};
+
+export const gatePassesAPI = {
+  getGatePasses: (params) => api.get('/gate-passes', { params }),
+  createGatePass: (data) => api.post('/gate-passes', data),
+  updateGatePass: (id, data) => api.put(`/gate-passes/${id}`, data),
+  deleteGatePass: (id) => api.delete(`/gate-passes/${id}`),
+  getPendingReturns: (params) => api.get('/gate-passes/pending-returns', { params }),
 };

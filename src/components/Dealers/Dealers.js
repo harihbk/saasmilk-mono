@@ -40,6 +40,7 @@ import {
 } from '@ant-design/icons';
 import { dealersAPI, dealerGroupsAPI } from '../../services/api';
 import routesAPI from '../../services/routesAPI';
+import DealerPricing from '../DealerPricing/DealerPricing';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -117,10 +118,10 @@ const Dealers = () => {
 
   const showModal = (dealer = null) => {
     console.log('showModal called with dealer:', dealer); // Debug log
-    
+
     setEditingDealer(dealer);
     setModalVisible(true);
-    
+
     // Reset form and set defaults when creating new dealer
     if (!dealer) {
       form.resetFields();
@@ -141,12 +142,13 @@ const Dealers = () => {
   // Function to populate form values for editing
   const populateFormForEdit = (dealer) => {
     if (!dealer) return;
-    
+
     console.log('populateFormForEdit: Dealer data received:', dealer);
     console.log('populateFormForEdit: Financial info:', dealer.financialInfo);
-    
+
     const formValues = {
       name: dealer.name || '',
+      dealerCode: dealer.dealerCode || '',
       businessName: dealer.businessName || '',
       dealerGroup: dealer.dealerGroup?._id || dealer.dealerGroup || '',
       route: dealer.route?._id || dealer.route || '',
@@ -173,13 +175,13 @@ const Dealers = () => {
         gstNumber: dealer.financialInfo?.gstNumber || '',
       },
     };
-    
+
     console.log('populateFormForEdit: Form values to set:', formValues);
     console.log('populateFormForEdit: Financial info to set:', formValues.financialInfo);
-    
+
     // Don't reset fields, just set the values
     form.setFieldsValue(formValues);
-    
+
     // Double-check the values were set
     setTimeout(() => {
       const currentValues = form.getFieldsValue();
@@ -197,10 +199,11 @@ const Dealers = () => {
   const handleSubmit = async (values) => {
     try {
       console.log('Form values received:', values); // Debug log
-      
+
       // Ensure nested objects are properly structured even if some fields are missing
       const dealerData = {
         name: values.name,
+        dealerCode: values.dealerCode,
         businessName: values.businessName,
         dealerGroup: values.dealerGroup,
         route: values.route,
@@ -304,7 +307,7 @@ const Dealers = () => {
       // Fetch detailed dealer info with transactions
       const response = await dealersAPI.getDealer(dealerId);
       const dealerData = response.data.data;
-      
+
       // Process transactions with proper formatting
       const transactions = (dealerData.transactions || []).map(transaction => ({
         key: transaction._id,
@@ -316,10 +319,10 @@ const Dealers = () => {
         reference: transaction.reference,
         createdAt: transaction.date
       }));
-      
+
       // Sort by date (newest first)
       transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
-      
+
       setDealerTransactions(transactions);
     } catch (error) {
       console.error('Error fetching dealer transactions:', error);
@@ -493,10 +496,10 @@ const Dealers = () => {
             cancelText="No"
           >
             <Tooltip title="Delete">
-              <Button 
-                type="text" 
-                danger 
-                icon={<DeleteOutlined />} 
+              <Button
+                type="text"
+                danger
+                icon={<DeleteOutlined />}
                 size="small"
               />
             </Tooltip>
@@ -676,6 +679,18 @@ const Dealers = () => {
                 </Col>
                 <Col span={12}>
                   <Form.Item
+                    name="dealerCode"
+                    label="Dealer Code"
+                    tooltip="Leave blank to auto-generate based on tenant"
+                  >
+                    <Input placeholder="e.g. DLR-001 (Optional)" />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Row gutter={16}>
+                <Col span={24}>
+                  <Form.Item
                     name="businessName"
                     label="Business Name"
                   >
@@ -687,7 +702,7 @@ const Dealers = () => {
               <Form.Item
                 name="dealerGroup"
                 label="Dealer Group"
-                rules={[{ required: true, message: 'Please select dealer group' }]}
+                rules={[{ message: 'Please select dealer group' }]}
               >
                 <Select placeholder="Select dealer group">
                   {dealerGroups.map(group => (
@@ -707,7 +722,7 @@ const Dealers = () => {
                   ))}
                 </Select>
               </Form.Item>
-              
+
               <Form.Item
                 name="route"
                 label="Delivery Route"
@@ -1073,7 +1088,7 @@ const Dealers = () => {
                 <Descriptions.Item label="Current Balance">
                   <Tag color={getBalanceColor(selectedDealer.financialInfo.currentBalance)}>
                     ₹{Math.abs(selectedDealer.financialInfo.currentBalance).toLocaleString()}
-                    {selectedDealer.financialInfo.currentBalance !== 0 && 
+                    {selectedDealer.financialInfo.currentBalance !== 0 &&
                       (selectedDealer.financialInfo.currentBalance > 0 ? ' DR' : ' CR')
                     }
                   </Tag>
@@ -1097,8 +1112,23 @@ const Dealers = () => {
                 <Descriptions.Item label="GST Number">{selectedDealer.financialInfo.gstNumber || 'N/A'}</Descriptions.Item>
               </Descriptions>
             </Tabs.TabPane>
-            
-            <Tabs.TabPane 
+
+            <Tabs.TabPane
+              tab={
+                <Space>
+                  <DollarOutlined />
+                  Pricing
+                </Space>
+              }
+              key="pricing"
+            >
+              <DealerPricing
+                dealerId={selectedDealer._id}
+                dealerName={selectedDealer.name}
+              />
+            </Tabs.TabPane>
+
+            <Tabs.TabPane
               tab={
                 <Space>
                   <HistoryOutlined />
@@ -1107,7 +1137,7 @@ const Dealers = () => {
                     <Tag color="blue">{dealerTransactions.length}</Tag>
                   )}
                 </Space>
-              } 
+              }
               key="transactions"
             >
               <div style={{ marginBottom: 16 }}>
@@ -1143,9 +1173,9 @@ const Dealers = () => {
                   </Col>
                 </Row>
               </div>
-              
+
               <Divider />
-              
+
               {transactionLoading ? (
                 <div style={{ textAlign: 'center', padding: '40px' }}>
                   <Space direction="vertical">

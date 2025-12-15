@@ -126,11 +126,16 @@ const Users = () => {
   const showEditUserModal = (user) => {
     setEditingUser(user);
     setModalVisible(true);
+
+    // Attempt to map existing role value (name or ID) to an ID from the loaded roles list
+    const userRole = user.role;
+    const matchingRole = roles.find(r => r._id === userRole || r.name.toLowerCase() === userRole?.toString().toLowerCase());
+
     form.setFieldsValue({
       name: user.name,
       email: user.email,
       phone: user.phone,
-      role: user.role,
+      role: matchingRole ? matchingRole._id : user.role, // Prefer ID
       isActive: user.isActive,
       address: user.address,
     });
@@ -217,9 +222,9 @@ const Users = () => {
       key: 'user',
       render: (_, record) => (
         <div style={{ display: 'flex', alignItems: 'center' }}>
-          <Avatar 
-            icon={<UserOutlined />} 
-            src={record.avatar} 
+          <Avatar
+            icon={<UserOutlined />}
+            src={record.avatar}
             style={{ marginRight: 12 }}
           />
           <div>
@@ -235,11 +240,19 @@ const Users = () => {
       title: 'Role',
       dataIndex: 'role',
       key: 'role',
-      render: (role) => (
-        <Tag color={getRoleColor(role)} style={{ textTransform: 'capitalize' }}>
-          {role}
-        </Tag>
-      ),
+      render: (roleVal) => {
+        // Find role by ID or Name
+        const matchingRole = roles.find(r => r._id === roleVal || r.name.toLowerCase() === roleVal?.toString().toLowerCase());
+        const display = matchingRole ? matchingRole.displayName : roleVal;
+        // Determine color based on role name if matched, else fallback
+        const colorKey = matchingRole ? matchingRole.name.toLowerCase() : (roleVal?.toString().toLowerCase() || 'default');
+
+        return (
+          <Tag color={getRoleColor(colorKey)} style={{ textTransform: 'capitalize' }}>
+            {display}
+          </Tag>
+        );
+      },
     },
     {
       title: 'Phone',
@@ -252,9 +265,9 @@ const Users = () => {
       dataIndex: 'isActive',
       key: 'isActive',
       render: (isActive) => (
-        <Badge 
-          status={isActive ? 'success' : 'error'} 
-          text={isActive ? 'Active' : 'Inactive'} 
+        <Badge
+          status={isActive ? 'success' : 'error'}
+          text={isActive ? 'Active' : 'Inactive'}
         />
       ),
     },
@@ -300,11 +313,11 @@ const Users = () => {
             okText="Yes"
             cancelText="No"
           >
-            <Button 
-              type="text" 
-              danger 
-              icon={<DeleteOutlined />} 
-              title="Deactivate User" 
+            <Button
+              type="text"
+              danger
+              icon={<DeleteOutlined />}
+              title="Deactivate User"
             />
           </Popconfirm>
         </Space>
@@ -519,7 +532,7 @@ const Users = () => {
               >
                 <Select placeholder="Select role">
                   {roles.map(role => (
-                    <Option key={role.name} value={role.name.toLowerCase()}>
+                    <Option key={role._id} value={role._id}>
                       <Tag color={getRoleColor(role.name.toLowerCase())} style={{ marginRight: 8 }}>
                         {role.displayName}
                       </Tag>
@@ -539,9 +552,9 @@ const Users = () => {
                 valuePropName="checked"
                 initialValue={true}
               >
-                <Switch 
-                  checkedChildren="Active" 
-                  unCheckedChildren="Inactive" 
+                <Switch
+                  checkedChildren="Active"
+                  unCheckedChildren="Inactive"
                 />
               </Form.Item>
             </Col>
@@ -616,15 +629,15 @@ const Users = () => {
                 </Tag>
               </Descriptions.Item>
               <Descriptions.Item label="Status">
-                <Badge 
-                  status={viewingUser.isActive ? 'success' : 'error'} 
-                  text={viewingUser.isActive ? 'Active' : 'Inactive'} 
+                <Badge
+                  status={viewingUser.isActive ? 'success' : 'error'}
+                  text={viewingUser.isActive ? 'Active' : 'Inactive'}
                 />
               </Descriptions.Item>
               <Descriptions.Item label="Email Verified">
-                <Badge 
-                  status={viewingUser.isEmailVerified ? 'success' : 'warning'} 
-                  text={viewingUser.isEmailVerified ? 'Verified' : 'Not Verified'} 
+                <Badge
+                  status={viewingUser.isEmailVerified ? 'success' : 'warning'}
+                  text={viewingUser.isEmailVerified ? 'Verified' : 'Not Verified'}
                 />
               </Descriptions.Item>
               <Descriptions.Item label="Last Login">

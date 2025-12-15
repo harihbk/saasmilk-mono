@@ -17,6 +17,7 @@ import {
   Row,
   Col,
   Statistic,
+  Radio,
 } from 'antd';
 import {
   PlusOutlined,
@@ -26,7 +27,7 @@ import {
   ExportOutlined,
   FilterOutlined,
 } from '@ant-design/icons';
-import { productsAPI, categoriesAPI } from '../../services/api';
+import { productsAPI, categoriesAPI, subCategoriesAPI } from '../../services/api';
 import dayjs from 'dayjs';
 
 const { Title } = Typography;
@@ -36,6 +37,7 @@ const { TextArea } = Input;
 const Products = () => {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [subcategories, setSubcategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
@@ -59,6 +61,7 @@ const Products = () => {
   // Fetch categories on component mount
   useEffect(() => {
     fetchCategories();
+    // fetchSubcategories(); // No longer fetch all on mount
   }, []);
 
   // Fetch products when filters or pagination change
@@ -73,8 +76,20 @@ const Products = () => {
       setCategories(Array.isArray(categoriesData) ? categoriesData : []);
     } catch (error) {
       console.error('Error fetching categories:', error);
-      // Keep empty array if API fails
       setCategories([]);
+    }
+  };
+
+  // Fetch subcategories, optionally filtered by category
+  const fetchSubcategories = async (categoryId = null) => {
+    try {
+      const params = categoryId ? { category: categoryId } : {};
+      const response = await subCategoriesAPI.getActiveSubCategories(params);
+      const inventoryData = response.data.data.inventory || [];
+      setSubcategories(inventoryData);
+    } catch (error) {
+      console.error('Error fetching subcategories:', error);
+      setSubcategories([]);
     }
   };
 
@@ -200,10 +215,46 @@ const Products = () => {
       if (wholesale <= cost || wholesale >= selling) isValid = false;
     }
 
+    const taxMethod = form.getFieldValue('taxMethod') || 'exclusive';
+    const igst = form.getFieldValue('igst') || 0;
+    const cgst = form.getFieldValue('cgst') || 0;
+    const sgst = form.getFieldValue('sgst') || 0;
+    const totalTax = igst > 0 ? igst : (cgst + sgst);
+
+    // Calculate Base Price and Tax Amount
+    let basePrice = selling;
+    let taxAmount = 0;
+    let finalPrice = selling;
+
+    if (taxMethod === 'inclusive') {
+      // If Inclusive: Selling Price = Base Price + Tax
+      // Base Price = Selling Price / (1 + Tax%)
+      basePrice = selling / (1 + (totalTax / 100));
+      taxAmount = selling - basePrice;
+    } else {
+      // If Exclusive: Final Price = Selling Price + Tax
+      // Base Price = Selling Price
+      taxAmount = selling * (totalTax / 100);
+      finalPrice = selling + taxAmount;
+    }
+
+    if (cost > 0 && basePrice > 0) {
+      profitMargin = ((basePrice - cost) / cost * 100);
+      if (basePrice <= cost) isValid = false;
+    }
+
+    if (cost > 0 && wholesale > 0) {
+      wholesaleMargin = ((wholesale - cost) / cost * 100);
+      if (wholesale <= cost || wholesale >= basePrice) isValid = false;
+    }
+
     setPriceMetrics({
       profitMargin: profitMargin.toFixed(2),
       wholesaleMargin: wholesaleMargin.toFixed(2),
-      isValid
+      isValid,
+      basePrice: basePrice.toFixed(2),
+      taxAmount: taxAmount.toFixed(2),
+      finalPrice: finalPrice.toFixed(2)
     });
   };
 
@@ -221,11 +272,12 @@ const Products = () => {
       const priceValue = typeof product.price === 'object' ? product.price.selling : product.price;
       const costValue = typeof product.price === 'object' ? product.price.cost : product.cost;
       const wholesaleValue = typeof product.price === 'object' ? product.price.wholesale : 0;
-      
+
       form.setFieldsValue({
         name: product.name,
         description: product.description,
         category: typeof product.category === 'object' ? product.category._id : product.category,
+        subcategory: typeof product.subcategory === 'object' ? product.subcategory._id : product.subcategory,
         brand: product.brand,
         sku: product.sku,
         barcode: product.barcode,
@@ -240,12 +292,22 @@ const Products = () => {
         packagingSize: product.packaging?.size?.value,
         packagingUnit: product.packaging?.size?.unit,
         status: product.status,
+        productCode: product.productCode,
+        taxMethod: product.taxMethod || 'exclusive',
         // minStockLevel: product.minStockLevel,
         // maxStockLevel: product.maxStockLevel,
         isOrganic: product.isOrganic,
         // expiryDate: product.expiryDate ? dayjs(product.expiryDate) : null,
       });
+
+      // Fetch subcategories for the product's category immediately
+      const categoryId = typeof product.category === 'object' ? product.category._id : product.category;
+      if (categoryId) {
+        fetchSubcategories(categoryId);
+      }
     } else {
+      // Clear subcategories when adding new product
+      setSubcategories([]);
       form.resetFields();
     }
   };
@@ -253,6 +315,7 @@ const Products = () => {
   const handleModalCancel = () => {
     setModalVisible(false);
     setEditingProduct(null);
+    setSubcategories([]); // Clear subcategories on close
     form.resetFields();
     setPriceMetrics({
       profitMargin: 0,
@@ -267,10 +330,12 @@ const Products = () => {
         name: values.name,
         description: values.description,
         category: values.category,
+        subcategory: values.subcategory,
         brand: values.brand,
         sku: values.sku,
         barcode: values.barcode,
         unit: values.unit,
+        taxMethod: values.taxMethod,
         price: {
           cost: values.cost,
           selling: values.price,
@@ -386,6 +451,20 @@ const Products = () => {
       },
     },
     {
+      title: 'Subcategory',
+      dataIndex: 'subcategory',
+      key: 'subcategory',
+      render: (subcategory, record) => {
+        if (record.subcategoryDetails) {
+          return record.subcategoryDetails.subcategory;
+        }
+        if (typeof subcategory === 'object' && subcategory !== null) {
+          return subcategory.subcategory;
+        }
+        return 'N/A';
+      }
+    },
+    {
       title: 'Brand',
       dataIndex: 'brand',
       key: 'brand',
@@ -398,22 +477,28 @@ const Products = () => {
         // Handle both number and object formats
         const priceValue = typeof price === 'object' ? price?.selling : price;
         const numPrice = typeof priceValue === 'number' ? priceValue : parseFloat(priceValue) || 0;
-        
+
         // Calculate tax
         const igst = record.tax?.igst || 0;
         const cgst = record.tax?.cgst || 0;
         const sgst = record.tax?.sgst || 0;
         const totalTax = igst > 0 ? igst : (cgst + sgst);
         const priceWithTax = numPrice * (1 + totalTax / 100);
-        
+
         return (
           <div>
-            <div style={{ fontWeight: 'bold' }}>${numPrice.toFixed(2)}</div>
-            {totalTax > 0 && (
-              <div style={{ fontSize: '12px', color: '#666' }}>
-                +{totalTax}% tax = ${priceWithTax.toFixed(2)}
-              </div>
-            )}
+            <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>₹{numPrice.toFixed(2)}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              {record.taxMethod === 'inclusive' ?
+                <Tag color="cyan" style={{ marginRight: 0, width: 'fit-content' }}>Inclusive ({totalTax}%)</Tag> :
+                <Tag color="orange" style={{ marginRight: 0, width: 'fit-content' }}>Exclusive (+{totalTax}%)</Tag>
+              }
+              {record.taxMethod === 'exclusive' && totalTax > 0 && (
+                <div style={{ fontSize: '11px', color: '#888' }}>
+                  Total: ₹{priceWithTax.toFixed(2)}
+                </div>
+              )}
+            </div>
           </div>
         );
       },
@@ -545,7 +630,7 @@ const Products = () => {
                   style={{ width: 150 }}
                   onChange={handleCategoryFilter}
                 >
-                  {categories.length > 0 && 
+                  {categories.length > 0 &&
                     categories.map(cat => (
                       <Option key={cat.value} value={cat.value}>{cat.label}</Option>
                     ))
@@ -615,7 +700,16 @@ const Products = () => {
                 <Input placeholder="Enter product name" />
               </Form.Item>
             </Col>
-            <Col span={12}>
+            <Col span={6}>
+              <Form.Item
+                name="productCode"
+                label="Product Code"
+                rules={[{ required: true, message: 'Please enter product code' }]}
+              >
+                <Input placeholder="Enter Product Code" />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
               <Form.Item
                 name="sku"
                 label="SKU"
@@ -640,11 +734,33 @@ const Products = () => {
                 label="Category"
                 rules={[{ required: true, message: 'Please select category' }]}
               >
-                <Select placeholder="Select category">
-                  {categories.length > 0 && 
+                <Select
+                  placeholder="Select category"
+                  onChange={(value) => {
+                    form.setFieldsValue({ subcategory: undefined });
+                    // Fetch subcategories for the selected category
+                    fetchSubcategories(value);
+                  }}
+                >
+                  {categories.length > 0 &&
                     categories.map(cat => (
                       <Option key={cat.value} value={cat.value}>{cat.label}</Option>
                     ))
+                  }
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                name="subcategory"
+                label="Subcategory"
+                dependencies={['category']}
+                rules={[{ required: true, message: 'Please select subcategory' }]}
+              >
+                <Select placeholder="Select subcategory" allowClear>
+                  {subcategories.map(sub => (
+                    <Option key={sub.value} value={sub.value}>{sub.subcategory}</Option>
+                  ))
                   }
                 </Select>
               </Form.Item>
@@ -723,7 +839,7 @@ const Products = () => {
                   prefix="₹"
                   onChange={() => {
                     // Trigger validation for selling price when cost changes
-                    form.validateFields(['price']).catch(() => {});
+                    form.validateFields(['price']).catch(() => { });
                     calculatePriceMetrics();
                   }}
                 />
@@ -763,7 +879,7 @@ const Products = () => {
                   prefix="₹"
                   onChange={() => {
                     // Trigger validation for related price fields
-                    form.validateFields(['price']).catch(() => {});
+                    form.validateFields(['price']).catch(() => { });
                     calculatePriceMetrics();
                   }}
                 />
@@ -782,6 +898,22 @@ const Products = () => {
                     </Option>
                   ))}
                 </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={24}>
+              <Form.Item
+                name="taxMethod"
+                label="Tax Calculation Method"
+                rules={[{ required: true, message: 'Please select tax method' }]}
+                initialValue="exclusive"
+              >
+                <Radio.Group onChange={() => calculatePriceMetrics()}>
+                  <Radio value="exclusive">Exclusive (Tax added to Price)</Radio>
+                  <Radio value="inclusive">Inclusive (Tax included in Price)</Radio>
+                </Radio.Group>
               </Form.Item>
             </Col>
           </Row>
@@ -816,7 +948,7 @@ const Products = () => {
                         />
                       </Col>
                     )}
-                    <Col span={8}>
+                    <Col span={6}>
                       <Statistic
                         title="Price Structure"
                         value={priceMetrics.isValid ? "Valid" : "Invalid"}
@@ -824,6 +956,14 @@ const Products = () => {
                           color: priceMetrics.isValid ? '#52c41a' : '#ff4d4f',
                           fontSize: '16px'
                         }}
+                      />
+                    </Col>
+                    <Col span={6}>
+                      <Statistic
+                        title="Final Selling Price"
+                        value={priceMetrics.finalPrice}
+                        prefix="$"
+                        valueStyle={{ fontSize: '16px', fontWeight: 'bold' }}
                       />
                     </Col>
                   </Row>
