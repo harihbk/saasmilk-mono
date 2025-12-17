@@ -25,6 +25,7 @@ import {
   BarChartOutlined,
   HistoryOutlined,
   FileTextOutlined,
+  FileDoneOutlined,
   PlusOutlined,
   ClockCircleOutlined,
   CheckCircleOutlined,
@@ -66,6 +67,16 @@ const Layout = () => {
         key: '/orders',
         icon: <ShoppingCartOutlined />,
         label: 'Orders',
+      },
+      {
+        key: '/invoices',
+        icon: <FileTextOutlined />,
+        label: 'Sales Invoice',
+      },
+      {
+        key: '/receipts',
+        icon: <FileDoneOutlined />,
+        label: 'Receipts',
       },
       {
         key: '/customers',

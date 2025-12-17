@@ -410,3 +410,23 @@ export const gatePassesAPI = {
   deleteGatePass: (id) => api.delete(`/gate-passes/${id}`),
   getPendingReturns: (params) => api.get('/gate-passes/pending-returns', { params }),
 };
+
+export const companySettingsAPI = {
+  getSettings: () => api.get('/company-settings'),
+  updateSettings: (data) => api.put('/company-settings', data),
+  updateLogo: (data) => api.put('/company-settings/logo', data),
+  updateBusinessDetails: (data) => api.put('/company-settings/business-details', data),
+  getSubscription: () => api.get('/company-settings/subscription'),
+};
+
+export const invoicesAPI = {
+  getInvoices: (params) => api.get('/invoices', { params }),
+  getInvoice: (id) => api.get(`/invoices/${id}`),
+  createInvoiceFromOrder: (orderId) => api.post('/invoices/from-order', { orderId }),
+};
+
+export const receiptsAPI = {
+  getReceipts: (params) => api.get('/receipts', { params }),
+  getReceipt: (id) => api.get(`/receipts/${id}`),
+  createReceipt: (data) => api.post('/receipts', data),
+};

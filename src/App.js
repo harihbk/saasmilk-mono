@@ -12,6 +12,8 @@ import CompanyManagement from './pages/SaasAdmin/CompanyManagement';
 import Dashboard from './pages/Dashboard/Dashboard';
 import Products from './pages/Products/Products';
 import Orders from './pages/Orders/Orders';
+import SalesInvoices from './pages/Invoices/SalesInvoices';
+import Receipts from './pages/Receipts/Receipts';
 import Customers from './pages/Customers/Customers';
 import Suppliers from './pages/Suppliers/Suppliers';
 import Inventory from './pages/Inventory/Inventory';
@@ -100,8 +102,12 @@ function AppRoutes() {
       }>
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
+
+
         <Route path="products" element={<Products />} />
         <Route path="orders" element={<Orders />} />
+        <Route path="invoices" element={<SalesInvoices />} />
+        <Route path="receipts" element={<Receipts />} />
         <Route path="customers" element={<Customers />} />
         <Route path="suppliers" element={<Suppliers />} />
         <Route path="inventory" element={<Inventory />} />

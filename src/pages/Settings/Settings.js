@@ -7,6 +7,7 @@ import {
   Modal,
   Form,
   Input,
+  InputNumber,
   message,
   Popconfirm,
   Typography,
@@ -234,6 +235,7 @@ const Settings = () => {
           website: companyData.businessInfo?.website,
           description: companyData.businessInfo?.description,
           gstNumber: companyData.businessInfo?.gstNumber,
+          profitMargin: companyData.businessInfo?.profitMargin || 0,
         },
       });
     } catch (error) {
@@ -617,6 +619,24 @@ const Settings = () => {
                     name={['businessInfo', 'gstNumber']}
                   >
                     <Input />
+                  </Form.Item>
+                </Col>
+
+                <Col span={12}>
+                  <Form.Item
+                    label="Profit Margin (%)"
+                    name={['businessInfo', 'profitMargin']}
+                    tooltip="Default profit margin percentage for pricing calculations"
+                  >
+                    <InputNumber
+                      style={{ width: '100%' }}
+                      min={0}
+                      max={100}
+                      step={0.1}
+                      precision={2}
+                      placeholder="0.00"
+                      suffix="%"
+                    />
                   </Form.Item>
                 </Col>
 

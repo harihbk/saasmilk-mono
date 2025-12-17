@@ -165,7 +165,8 @@ const DealerBalanceSheet = () => {
     {
       title: 'Date',
       dataIndex: 'date',
-      width: 120,
+      width: 100,
+      render: (date) => dayjs(date).format('DD MMM YY'),
       sorter: (a, b) => dayjs(a.date).unix() - dayjs(b.date).unix(),
     },
     {
@@ -184,14 +185,9 @@ const DealerBalanceSheet = () => {
       },
     },
     {
-      title: 'Description',
-      dataIndex: 'description',
-      width: 300,
-    },
-    {
       title: 'Reference',
       dataIndex: 'reference',
-      width: 150,
+      width: 140,
       render: (ref, record) =>
         record.type === 'invoice' && record.invoiceDetails ? (
           <Button
@@ -202,44 +198,50 @@ const DealerBalanceSheet = () => {
           >
             {ref}
           </Button>
-        ) : ref,
+        ) : <Text copyable>{ref}</Text>,
     },
     {
-      title: 'Invoice Amount (₹)',
+      title: 'Description',
+      dataIndex: 'description',
+      width: 200, // Reduced width since it can wrap or be less critical
+      ellipsis: true, // Handle long descriptions
+    },
+    {
+      title: 'Inv Amount',
       dataIndex: 'invoiceAmount',
       align: 'right',
-      width: 150,
+      width: 120,
       render: (val) =>
-        val > 0 ? `₹${val.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-',
+        val ? `₹${Number(val).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-',
     },
     {
-      title: 'Debit (₹)',
+      title: 'Debit',
       dataIndex: 'debit',
       align: 'right',
       width: 120,
       render: (val) =>
-        val > 0 ? `₹${val.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-',
+        val ? `₹${Number(val).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-',
     },
     {
-      title: 'Credit (₹)',
+      title: 'Credit',
       dataIndex: 'credit',
       align: 'right',
       width: 120,
       render: (val) =>
-        val > 0 ? `₹${val.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-',
+        val ? `₹${Number(val).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-',
     },
     {
-      title: 'Balance (₹)',
+      title: 'Balance',
       dataIndex: 'balance',
       align: 'right',
       fixed: 'right',
-      width: 150,
+      width: 140,
       render: (bal) => (
         <Tag
           color={bal > 0 ? 'red' : bal < 0 ? 'green' : 'default'}
-          style={{ fontSize: '14px' }}
+          style={{ fontSize: '13px' }}
         >
-          ₹{Math.abs(bal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+          ₹{Math.abs(bal).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           {bal > 0 ? ' DR' : bal < 0 ? ' CR' : ''}
         </Tag>
       ),
@@ -308,35 +310,37 @@ const DealerBalanceSheet = () => {
             <Card>
               <Statistic
                 title="Opening Balance"
-                value={Math.abs(summary.openingBalance)}
+                value={Math.abs(summary.openingBalance || 0)}
                 prefix="₹"
-                suffix={summary.openingBalance > 0 ? 'DR' : summary.openingBalance < 0 ? 'CR' : ''}
-                valueStyle={{ color: getBalanceColor(summary.openingBalance) }}
+                precision={2}
+                suffix={(summary.openingBalance || 0) > 0 ? 'DR' : (summary.openingBalance || 0) < 0 ? 'CR' : ''}
+                valueStyle={{ color: getBalanceColor(summary.openingBalance || 0) }}
               />
             </Card>
           </Col>
           <Col xs={12} sm={8} lg={4}>
-            <Card><Statistic title="Total Debits" value={summary.totalDebits} prefix="₹" /></Card>
+            <Card><Statistic title="Total Debits" value={summary.totalDebits || 0} prefix="₹" precision={2} /></Card>
           </Col>
           <Col xs={12} sm={8} lg={4}>
-            <Card><Statistic title="Total Credits" value={summary.totalCredits} prefix="₹" /></Card>
+            <Card><Statistic title="Total Credits" value={summary.totalCredits || 0} prefix="₹" precision={2} /></Card>
           </Col>
           <Col xs={12} sm={8} lg={4}>
             <Card>
               <Statistic
                 title="Closing Balance"
-                value={Math.abs(summary.closingBalance)}
+                value={Math.abs(summary.closingBalance || 0)}
                 prefix="₹"
-                suffix={summary.closingBalance > 0 ? 'DR' : summary.closingBalance < 0 ? 'CR' : ''}
-                valueStyle={{ color: getBalanceColor(summary.closingBalance) }}
+                precision={2}
+                suffix={(summary.closingBalance || 0) > 0 ? 'DR' : (summary.closingBalance || 0) < 0 ? 'CR' : ''}
+                valueStyle={{ color: getBalanceColor(summary.closingBalance || 0) }}
               />
             </Card>
           </Col>
           <Col xs={12} sm={8} lg={4}>
-            <Card><Statistic title="Total Invoices" value={summary.totalInvoices} prefix={<FileTextOutlined />} /></Card>
+            <Card><Statistic title="Total Invoices" value={summary.totalInvoices || 0} prefix={<FileTextOutlined />} /></Card>
           </Col>
           <Col xs={12} sm={8} lg={4}>
-            <Card><Statistic title="Pending Amount" value={summary.pendingAmount} prefix="₹" valueStyle={{ color: '#faad14' }} /></Card>
+            <Card><Statistic title="Pending Amount" value={summary.pendingAmount || 0} prefix="₹" precision={2} valueStyle={{ color: '#faad14' }} /></Card>
           </Col>
         </Row>
       )}
@@ -358,15 +362,15 @@ const DealerBalanceSheet = () => {
                   <strong>Total</strong>
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={4} align="right">
-                  <strong>₹{summary.totalDebits.toLocaleString()}</strong>
+                  <strong>₹{(summary.totalDebits || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={5} align="right">
-                  <strong>₹{summary.totalCredits.toLocaleString()}</strong>
+                  <strong>₹{(summary.totalCredits || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={6} align="right">
-                  <Tag color={summary.closingBalance > 0 ? 'red' : 'green'}>
-                    ₹{Math.abs(summary.closingBalance).toLocaleString()}
-                    {summary.closingBalance > 0 ? ' DR' : ' CR'}
+                  <Tag color={(summary.closingBalance || 0) > 0 ? 'red' : 'green'}>
+                    ₹{Math.abs(summary.closingBalance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {(summary.closingBalance || 0) > 0 ? ' DR' : ' CR'}
                   </Tag>
                 </Table.Summary.Cell>
               </Table.Summary.Row>

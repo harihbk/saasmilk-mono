@@ -40,7 +40,7 @@ import {
   CalculatorOutlined,
   DollarOutlined,
 } from '@ant-design/icons';
-import { ordersAPI, dealersAPI, customersAPI, dealerGroupsAPI, productsAPI, debugAPI, companiesAPI } from '../../services/api';
+import { ordersAPI, dealersAPI, customersAPI, dealerGroupsAPI, productsAPI, debugAPI, companiesAPI, invoicesAPI } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import dayjs from 'dayjs';
 
@@ -139,6 +139,35 @@ const Orders = () => {
 
 
 
+
+  const handleConvertToInvoice = async (order) => {
+    try {
+      Modal.confirm({
+        title: 'Generate Invoice',
+        content: `Are you sure you want to generate an invoice for Order #${order.orderNumber}?`,
+        onOk: async () => {
+          try {
+            const response = await invoicesAPI.createInvoiceFromOrder(order._id);
+            if (response.data.success) {
+              message.success('Invoice generated successfully');
+              fetchOrders(); // Refresh orders to update UI (hide convert button)
+              // Optionally redirect to invoice or show invoice details
+              // For now we just stay on orders page
+            }
+          } catch (error) {
+            console.error('Error generating invoice:', error);
+            if (error.response?.data?.message) {
+              message.error(error.response.data.message);
+            } else {
+              message.error('Failed to generate invoice');
+            }
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error in conversion handler:', error);
+    }
+  };
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -265,13 +294,26 @@ const Orders = () => {
     if (orderType === 'dealer' && buyerId) {
       const dealer = dealers.find(d => d._id === buyerId);
       setBuyerBalance(dealer?.financialInfo?.currentBalance || 0);
+      setGlobalDiscount(0); // Reset for dealers (they use per-product pricing)
       await fetchDealerPricing(buyerId);
     } else if (orderType === 'customer' && buyerId) {
       const customer = customers.find(c => c._id === buyerId);
-      setBuyerBalance(customer?.accountBalance || 0);
+      setBuyerBalance(customer?.financialInfo?.currentBalance || 0);
+
+      // Apply customer's default discount
+      const customerDiscount = customer?.financialInfo?.discountPercentage || 0;
+      if (customerDiscount > 0) {
+        setGlobalDiscount(customerDiscount);
+        setGlobalDiscountType('percentage');
+        message.info(`Applied customer discount: ${customerDiscount}%`);
+      } else {
+        setGlobalDiscount(0);
+      }
+
       setDealerPricing([]); // Customers use base prices
     } else {
       setBuyerBalance(0);
+      setGlobalDiscount(0);
       setDealerPricing([]);
     }
   };
@@ -570,7 +612,7 @@ const Orders = () => {
 
       // If customer data is populated, use it, otherwise set to 0
       if (typeof order.customer === 'object') {
-        setBuyerBalance(order.customer.accountBalance || 0);
+        setBuyerBalance(order.customer.financialInfo?.currentBalance || 0);
       } else {
         setBuyerBalance(0);
       }
@@ -1046,12 +1088,16 @@ const Orders = () => {
             </div>
           );
         } else if (record.customer) {
+          const customerName = record.customer.displayName ||
+            `${record.customer.personalInfo?.firstName || ''} ${record.customer.personalInfo?.lastName || ''}`.trim() ||
+            record.customer.name;
+
           return (
             <div>
               <UserOutlined style={{ color: '#52c41a', marginRight: 4 }} />
-              <div><strong>Customer:</strong> {record.customer.name}</div>
+              <div><strong>Customer:</strong> {customerName}</div>
               <div style={{ fontSize: '12px', color: '#666' }}>
-                {record.customer.email}
+                {record.customer.personalInfo?.email || record.customer.email}
               </div>
             </div>
           );
@@ -1158,9 +1204,17 @@ const Orders = () => {
           <Button
             type="text"
             icon={<FileTextOutlined />}
-            onClick={() => showInvoiceModal(record)}
             title="View Invoice"
+            onClick={() => showInvoiceModal(record)}
           />
+          {!record.invoice && (
+            <Button
+              type="text"
+              icon={<FileTextOutlined style={{ color: '#1890ff' }} />}
+              onClick={() => handleConvertToInvoice(record)}
+              title="Convert to Invoice"
+            />
+          )}
           {(record.payment?.status === 'pending' || record.payment?.status === 'partial') && (
             <Button
               type="text"
@@ -1206,21 +1260,27 @@ const Orders = () => {
         </Option>
       ));
     } else {
-      return customers.map(customer => (
-        <Option key={customer._id} value={customer._id}>
-          <div>
-            <div><strong>{customer.name}</strong></div>
-            <div style={{ fontSize: '12px', color: '#666' }}>
-              {customer.email} • {customer.phone}
-            </div>
-            {customer.accountBalance && (
-              <div style={{ fontSize: '12px', color: '#1890ff' }}>
-                Balance: ₹{customer.accountBalance.toLocaleString()}
+      return customers.map(customer => {
+        const displayName = customer.displayName ||
+          `${customer.personalInfo?.firstName || ''} ${customer.personalInfo?.lastName || ''}`.trim() ||
+          customer.name;
+
+        return (
+          <Option key={customer._id} value={customer._id}>
+            <div>
+              <div><strong>{displayName}</strong></div>
+              <div style={{ fontSize: '12px', color: '#666' }}>
+                {customer.personalInfo?.email} • {customer.personalInfo?.phone?.primary}
               </div>
-            )}
-          </div>
-        </Option>
-      ));
+              {customer.accountBalance && (
+                <div style={{ fontSize: '12px', color: '#1890ff' }}>
+                  Balance: ₹{customer.accountBalance.toLocaleString()}
+                </div>
+              )}
+            </div>
+          </Option>
+        );
+      });
     }
   };
 

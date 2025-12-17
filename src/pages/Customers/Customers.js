@@ -160,6 +160,7 @@ const Customers = () => {
         lastName: customer.personalInfo?.lastName || '',
         email: customer.personalInfo?.email || '',
         phone: customer.personalInfo?.phone?.primary || '',
+        customerNumber: customer.customerNumber || '',
         type: customer.type || 'individual',
         status: customer.status || 'active',
         address: customer.addresses?.[0] || {},
@@ -181,6 +182,7 @@ const Customers = () => {
     try {
       // Transform frontend form data to match backend Customer model structure
       const customerData = {
+        customerNumber: values.customerNumber,
         type: values.type,
         personalInfo: {
           firstName: values.firstName,
@@ -255,6 +257,7 @@ const Customers = () => {
     {
       title: 'Customer',
       key: 'customer',
+      width: 250,
       render: (_, record) => (
         <div style={{ display: 'flex', alignItems: 'center' }}>
           <Avatar
@@ -263,6 +266,11 @@ const Customers = () => {
           />
           <div>
             <div style={{ fontWeight: 'bold' }}>{record.displayName || `${record.personalInfo?.firstName || ''} ${record.personalInfo?.lastName || ''}`.trim()}</div>
+            {record.customerNumber && (
+              <div style={{ fontSize: '11px', color: '#1890ff', fontWeight: 500 }}>
+                {record.customerNumber}
+              </div>
+            )}
             <div style={{ fontSize: '12px', color: '#666' }}>
               <MailOutlined style={{ marginRight: 4 }} />
               {record.personalInfo?.email}
@@ -314,7 +322,7 @@ const Customers = () => {
         const balance = record.financialInfo?.currentBalance || 0;
         const balanceType = balance < 0 ? 'Credit' : balance > 0 ? 'Debit' : 'Clear';
         const color = balance < 0 ? 'green' : balance > 0 ? 'red' : 'default';
-        
+
         return (
           <div>
             <div style={{ fontWeight: 'bold', color: color === 'green' ? '#52c41a' : color === 'red' ? '#f5222d' : '#666' }}>
@@ -333,6 +341,17 @@ const Customers = () => {
       key: 'loyaltyPoints',
       render: (_, record) => (
         <Tag color="gold">{record.loyaltyProgram?.points || 0} pts</Tag>
+      ),
+    },
+    {
+      title: 'Financials',
+      key: 'financials',
+      render: (_, record) => (
+        <div style={{ fontSize: '12px' }}>
+          {record.financialInfo?.creditLimit > 0 && <div>Limit: ₹{record.financialInfo.creditLimit.toLocaleString()}</div>}
+          {record.financialInfo?.creditDays > 0 && <div>Days: {record.financialInfo.creditDays}</div>}
+          {record.financialInfo?.discountPercentage > 0 && <div style={{ color: '#52c41a' }}>Disc: {record.financialInfo.discountPercentage}%</div>}
+        </div>
       ),
     },
     {
@@ -493,6 +512,17 @@ const Customers = () => {
           onFinish={handleSubmit}
         >
           <Row gutter={16}>
+            <Col span={24}>
+              <Form.Item
+                name="customerNumber"
+                label="Customer Code"
+                tooltip="Leave empty to auto-generate"
+              >
+                <Input placeholder="e.g. CUST001" maxLength={20} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
             <Col span={8}>
               <Form.Item
                 name="firstName"
@@ -567,7 +597,7 @@ const Customers = () => {
           </Form.Item>
 
           <Title level={4}>Address Information</Title>
-          
+
           <Form.Item
             name={['address', 'street']}
             label="Street Address"
@@ -615,7 +645,7 @@ const Customers = () => {
           </Form.Item>
 
           <Title level={4}>Financial Information</Title>
-          
+
           <Row gutter={16}>
             <Col span={8}>
               <Form.Item
@@ -623,7 +653,7 @@ const Customers = () => {
                 label="Opening Balance"
                 rules={[{ type: 'number', min: 0, message: 'Opening balance cannot be negative' }]}
               >
-                <InputNumber 
+                <InputNumber
                   style={{ width: '100%' }}
                   placeholder="0.00"
                   min={0}
@@ -650,7 +680,7 @@ const Customers = () => {
                 label="Credit Limit"
                 rules={[{ type: 'number', min: 0, message: 'Credit limit cannot be negative' }]}
               >
-                <InputNumber 
+                <InputNumber
                   style={{ width: '100%' }}
                   placeholder="0.00"
                   min={0}
@@ -668,7 +698,7 @@ const Customers = () => {
                 label="Credit Days"
                 rules={[{ type: 'number', min: 0, message: 'Credit days cannot be negative' }]}
               >
-                <InputNumber 
+                <InputNumber
                   style={{ width: '100%' }}
                   placeholder="0"
                   min={0}
@@ -681,7 +711,7 @@ const Customers = () => {
                 label="Discount %"
                 rules={[{ type: 'number', min: 0, max: 100, message: 'Discount must be 0-100%' }]}
               >
-                <InputNumber 
+                <InputNumber
                   style={{ width: '100%' }}
                   placeholder="0"
                   min={0}

@@ -27,7 +27,7 @@ import {
   ExportOutlined,
   FilterOutlined,
 } from '@ant-design/icons';
-import { productsAPI, categoriesAPI, subCategoriesAPI } from '../../services/api';
+import { productsAPI, categoriesAPI, subCategoriesAPI, companySettingsAPI } from '../../services/api';
 import dayjs from 'dayjs';
 
 const { Title } = Typography;
@@ -57,12 +57,25 @@ const Products = () => {
     wholesaleMargin: 0,
     isValid: false
   });
+  const [companySettings, setCompanySettings] = useState(null);
 
   // Fetch categories on component mount
   useEffect(() => {
     fetchCategories();
+    fetchCompanySettings();
     // fetchSubcategories(); // No longer fetch all on mount
   }, []);
+
+  const fetchCompanySettings = async () => {
+    try {
+      const response = await companySettingsAPI.getSettings();
+      if (response.data.success) {
+        setCompanySettings(response.data.data.company);
+      }
+    } catch (error) {
+      console.error('Error fetching company settings:', error);
+    }
+  };
 
   // Fetch products when filters or pagination change
   useEffect(() => {
@@ -281,6 +294,7 @@ const Products = () => {
         brand: product.brand,
         sku: product.sku,
         barcode: product.barcode,
+        hsnCode: product.hsnCode,
         unit: product.unit,
         price: priceValue,
         cost: costValue,
@@ -334,6 +348,8 @@ const Products = () => {
         brand: values.brand,
         sku: values.sku,
         barcode: values.barcode,
+        hsnCode: values.hsnCode,
+        productCode: values.productCode,
         unit: values.unit,
         taxMethod: values.taxMethod,
         price: {
@@ -691,7 +707,7 @@ const Products = () => {
           onFinish={handleSubmit}
         >
           <Row gutter={16}>
-            <Col span={12}>
+            <Col span={6}>
               <Form.Item
                 name="name"
                 label="Product Name"
@@ -718,6 +734,14 @@ const Products = () => {
                 <Input placeholder="Enter SKU" />
               </Form.Item>
             </Col>
+            <Col span={6}>
+              <Form.Item
+                name="hsnCode"
+                label="HSN Code"
+              >
+                <Input placeholder="Enter HSN Code" />
+              </Form.Item>
+            </Col>
           </Row>
 
           <Form.Item
@@ -728,7 +752,7 @@ const Products = () => {
           </Form.Item>
 
           <Row gutter={16}>
-            <Col span={8}>
+            <Col span={6}>
               <Form.Item
                 name="category"
                 label="Category"
@@ -750,7 +774,7 @@ const Products = () => {
                 </Select>
               </Form.Item>
             </Col>
-            <Col span={8}>
+            <Col span={6}>
               <Form.Item
                 name="subcategory"
                 label="Subcategory"
@@ -765,7 +789,7 @@ const Products = () => {
                 </Select>
               </Form.Item>
             </Col>
-            <Col span={8}>
+            <Col span={6}>
               <Form.Item
                 name="brand"
                 label="Brand"
@@ -774,13 +798,12 @@ const Products = () => {
                 <Input placeholder="Enter brand" />
               </Form.Item>
             </Col>
-            <Col span={8}>
+            <Col span={6}>
               <Form.Item
-                name="unit"
-                label="Unit"
-                rules={[{ required: true, message: 'Please enter unit' }]}
+                name="barcode"
+                label="Barcode"
               >
-                <Input placeholder="e.g., bottle, container" />
+                <Input placeholder="Enter barcode (optional)" />
               </Form.Item>
             </Col>
           </Row>
@@ -837,7 +860,13 @@ const Products = () => {
                   style={{ width: '100%' }}
                   placeholder="0.00"
                   prefix="₹"
-                  onChange={() => {
+                  onChange={(value) => {
+                    // Auto-calculate selling price based on company profit margin
+                    if (value && companySettings?.businessInfo?.profitMargin) {
+                      const margin = companySettings.businessInfo.profitMargin;
+                      const sellingPrice = value * (1 + margin / 100);
+                      form.setFieldsValue({ price: parseFloat(sellingPrice.toFixed(2)) });
+                    }
                     // Trigger validation for selling price when cost changes
                     form.validateFields(['price']).catch(() => { });
                     calculatePriceMetrics();
@@ -898,6 +927,73 @@ const Products = () => {
                     </Option>
                   ))}
                 </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+
+          {/* Tax Information */}
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item
+                name="igst"
+                label="IGST (%)"
+                help="For inter-state sales"
+              >
+                <InputNumber
+                  min={0}
+                  max={100}
+                  step={0.01}
+                  precision={2}
+                  style={{ width: '100%' }}
+                  placeholder="0.00"
+                  onChange={(value) => {
+                    if (value > 0) {
+                      form.setFieldsValue({ cgst: 0, sgst: 0 });
+                    }
+                  }}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                name="cgst"
+                label="CGST (%)"
+                help="For intra-state sales"
+              >
+                <InputNumber
+                  min={0}
+                  max={100}
+                  step={0.01}
+                  precision={2}
+                  style={{ width: '100%' }}
+                  placeholder="0.00"
+                  onChange={(value) => {
+                    if (value > 0) {
+                      form.setFieldsValue({ igst: 0, sgst: value });
+                    }
+                  }}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                name="sgst"
+                label="SGST (%)"
+                help="For intra-state sales"
+              >
+                <InputNumber
+                  min={0}
+                  max={100}
+                  step={0.01}
+                  precision={2}
+                  style={{ width: '100%' }}
+                  placeholder="0.00"
+                  onChange={(value) => {
+                    if (value > 0) {
+                      form.setFieldsValue({ igst: 0, cgst: value });
+                    }
+                  }}
+                />
               </Form.Item>
             </Col>
           </Row>
@@ -972,72 +1068,7 @@ const Products = () => {
             </Row>
           )}
 
-          {/* Tax Information */}
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item
-                name="igst"
-                label="IGST (%)"
-                help="For inter-state sales"
-              >
-                <InputNumber
-                  min={0}
-                  max={100}
-                  step={0.01}
-                  precision={2}
-                  style={{ width: '100%' }}
-                  placeholder="0.00"
-                  onChange={(value) => {
-                    if (value > 0) {
-                      form.setFieldsValue({ cgst: 0, sgst: 0 });
-                    }
-                  }}
-                />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item
-                name="cgst"
-                label="CGST (%)"
-                help="For intra-state sales"
-              >
-                <InputNumber
-                  min={0}
-                  max={100}
-                  step={0.01}
-                  precision={2}
-                  style={{ width: '100%' }}
-                  placeholder="0.00"
-                  onChange={(value) => {
-                    if (value > 0) {
-                      form.setFieldsValue({ igst: 0, sgst: value });
-                    }
-                  }}
-                />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item
-                name="sgst"
-                label="SGST (%)"
-                help="For intra-state sales"
-              >
-                <InputNumber
-                  min={0}
-                  max={100}
-                  step={0.01}
-                  precision={2}
-                  style={{ width: '100%' }}
-                  placeholder="0.00"
-                  onChange={(value) => {
-                    if (value > 0) {
-                      form.setFieldsValue({ igst: 0, cgst: value });
-                    }
-                  }}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
+
 
           {/* Packaging Information */}
           <Row gutter={16}>
@@ -1055,6 +1086,7 @@ const Products = () => {
                   <Option value="jar">Jar</Option>
                   <Option value="bag">Bag</Option>
                   <Option value="bulk">Bulk</Option>
+                  <Option value="crate">Crate</Option>
                 </Select>
               </Form.Item>
             </Col>
@@ -1086,7 +1118,20 @@ const Products = () => {
                   <Option value="kg">kg</Option>
                   <Option value="oz">oz</Option>
                   <Option value="lb">lb</Option>
+                  <Option value="crate">Crate</Option>
                 </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item
+                name="unit"
+                label="Unit"
+                rules={[{ required: true, message: 'Please enter unit' }]}
+              >
+                <Input placeholder="e.g., bottle, container" />
               </Form.Item>
             </Col>
           </Row>
@@ -1119,14 +1164,6 @@ const Products = () => {
                 />
               </Form.Item>
             </Col> */}
-            <Col span={8}>
-              <Form.Item
-                name="barcode"
-                label="Barcode"
-              >
-                <Input placeholder="Enter barcode (optional)" />
-              </Form.Item>
-            </Col>
           </Row>
 
           {/* <Form.Item
