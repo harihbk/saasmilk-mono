@@ -207,16 +207,16 @@ const DealerGroups = () => {
         try {
           const response = await dealerGroupsAPI.getDealerGroupPricing(group._id);
           const pricing = response.data.data.pricing || [];
-          
+
           if (pricing.length === 0) {
             return { [group._id]: { totalProducts: 0, avgFinalPrice: 0, priceRange: '₹0' } };
           }
-          
+
           const finalPrices = pricing.map(p => p.pricing.finalPrice).filter(price => price > 0);
           const avgPrice = finalPrices.length > 0 ? finalPrices.reduce((sum, price) => sum + price, 0) / finalPrices.length : 0;
           const minPrice = finalPrices.length > 0 ? Math.min(...finalPrices) : 0;
           const maxPrice = finalPrices.length > 0 ? Math.max(...finalPrices) : 0;
-          
+
           return {
             [group._id]: {
               totalProducts: pricing.length,
@@ -228,7 +228,7 @@ const DealerGroups = () => {
           return { [group._id]: { totalProducts: 0, avgFinalPrice: 0, priceRange: '₹0' } };
         }
       });
-      
+
       const summaryResults = await Promise.all(summaryPromises);
       const summary = summaryResults.reduce((acc, curr) => ({ ...acc, ...curr }), {});
       setPricingSummary(summary);
@@ -368,10 +368,10 @@ const DealerGroups = () => {
             okText="Yes"
             cancelText="No"
           >
-            <Button 
-              type="text" 
-              danger 
-              icon={<DeleteOutlined />} 
+            <Button
+              type="text"
+              danger
+              icon={<DeleteOutlined />}
               size="small"
               title="Delete Group"
             />
@@ -502,8 +502,8 @@ const DealerGroups = () => {
               { max: 500, message: 'Description must be less than 500 characters' },
             ]}
           >
-            <TextArea 
-              rows={3} 
+            <TextArea
+              rows={3}
               placeholder="Brief description of this dealer group"
             />
           </Form.Item>
@@ -588,29 +588,11 @@ const DealerGroups = () => {
                 label="Group Color"
                 help="Used for visual identification"
               >
-                <ColorPicker 
-                  defaultValue="#1890ff"
-                  format="hex"
-                  showText
-                  onChange={(color, hex) => {
-                    // Ensure we always get a hex value
-                    let hexValue = hex;
-                    if (!hexValue || !hexValue.startsWith('#')) {
-                      // If hex is not provided, convert from color object
-                      if (color && color.toHexString) {
-                        hexValue = color.toHexString();
-                      } else if (typeof color === 'string' && color.startsWith('rgb(')) {
-                        // Convert RGB string to hex
-                        const rgbMatch = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
-                        if (rgbMatch) {
-                          const r = parseInt(rgbMatch[1]);
-                          const g = parseInt(rgbMatch[2]);
-                          const b = parseInt(rgbMatch[3]);
-                          hexValue = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-                        }
-                      }
-                    }
-                    form.setFieldValue('color', hexValue);
+                <Input
+                  type="color"
+                  style={{ width: 100, padding: '0 4px', height: 32 }}
+                  onChange={(e) => {
+                    form.setFieldValue('color', e.target.value);
                   }}
                 />
               </Form.Item>
@@ -698,8 +680,8 @@ const DealerGroups = () => {
             label="Description"
             rules={[{ required: true, message: 'Please enter description' }]}
           >
-            <Input.TextArea 
-              rows={3} 
+            <Input.TextArea
+              rows={3}
               placeholder="Reason for balance update..."
             />
           </Form.Item>

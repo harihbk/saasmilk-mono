@@ -37,6 +37,8 @@ import {
   CloudServerOutlined,
   CarOutlined,
   ToolOutlined,
+  PieChartOutlined,
+  DollarOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import './Layout.css';
@@ -161,11 +163,36 @@ const Layout = () => {
             label: 'Payment History',
           },
           {
+            key: '/reports/category-wise',
+            icon: <PieChartOutlined />,
+            label: 'Category Report',
+          },
+          {
+            key: '/reports/subcategory-wise',
+            icon: <PieChartOutlined />,
+            label: 'Subcategory Report',
+          },
+          {
+            key: '/reports/gst-audit',
+            icon: <AccountBookOutlined />,
+            label: 'GST Audit Report',
+          },
+          {
+            key: '/reports/product-sales',
+            icon: <ShoppingOutlined />,
+            label: 'Product Sales',
+          },
+          {
             key: '/reports/routes',
             icon: <EnvironmentOutlined />,
             label: 'Route Reports',
           },
         ],
+      },
+      {
+        key: '/payroll',
+        icon: <DollarOutlined />,
+        label: 'Payroll',
       },
       {
         key: '/settings',

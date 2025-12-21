@@ -69,6 +69,18 @@ api.interceptors.response.use(
   }
 );
 
+export const payrollAPI = {
+  getEmployees: () => api.get('/payroll/employees'),
+  updateConfig: (userId, data) => api.put(`/payroll/config/${userId}`, data),
+  createAdvance: (data) => api.post('/payroll/advance', data),
+  getAdvances: (userId) => api.get(`/payroll/advance/${userId}`),
+  generatePayroll: (data) => api.post('/payroll/generate', data),
+  deletePayroll: (id) => api.delete(`/payroll/${id}`),
+  verifyPayroll: (id) => api.put(`/payroll/${id}/verify`),
+  payPayroll: (id, data) => api.put(`/payroll/${id}/pay`, data),
+  getHistory: (month) => api.get('/payroll/history', { params: { month } }),
+};
+
 export default api;
 
 // API service functions
@@ -174,6 +186,7 @@ export const inventoryAPI = {
   releaseStock: (id, data) => api.post(`/inventory/${id}/release`, data),
   getAlerts: (params) => api.get('/inventory/meta/alerts', { params }),
   acknowledgeAlert: (id, alertId) => api.put(`/inventory/${id}/alerts/${alertId}/acknowledge`),
+  bulkUpdate: (data) => api.post('/inventory/bulk-update', data),
 };
 
 export const subCategoriesAPI = {
@@ -429,4 +442,14 @@ export const receiptsAPI = {
   getReceipts: (params) => api.get('/receipts', { params }),
   getReceipt: (id) => api.get(`/receipts/${id}`),
   createReceipt: (data) => api.post('/receipts', data),
+  updateReceipt: (id, data) => api.put(`/receipts/${id}`, data),
+  convertInvoice: (id) => api.post(`/receipts/${id}/invoice`),
+  undoReceipt: (id) => api.post(`/receipts/${id}/undo`),
+};
+
+export const reportsAPI = {
+  getCategoryWiseReport: (params) => api.get('/reports/category-wise', { params }),
+  getSubCategoryWiseReport: (params) => api.get('/reports/subcategory-wise', { params }),
+  getProductSalesReport: (params) => api.get('/reports/sales-by-product', { params }),
+  getGstAuditReport: (params) => api.get('/reports/gst-audit', { params }),
 };

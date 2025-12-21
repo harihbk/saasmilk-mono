@@ -665,304 +665,332 @@ const Dealers = () => {
           layout="vertical"
           onFinish={handleSubmit}
         >
-          <Tabs defaultActiveKey="basic">
-            <Tabs.TabPane tab="Basic Information" key="basic" forceRender={true}>
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item
-                    name="name"
-                    label="Dealer Name"
-                    rules={[{ required: true, message: 'Please enter dealer name' }]}
-                  >
-                    <Input placeholder="Enter dealer name" />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item
-                    name="dealerCode"
-                    label="Dealer Code"
-                    tooltip="Leave blank to auto-generate based on tenant"
-                  >
-                    <Input placeholder="e.g. DLR-001 (Optional)" />
-                  </Form.Item>
-                </Col>
-              </Row>
+          <Tabs
+            defaultActiveKey="basic"
+            items={[
+              {
+                key: 'basic',
+                label: 'Basic Information',
+                forceRender: true,
+                children: (
+                  <>
+                    <Row gutter={16}>
+                      <Col span={12}>
+                        <Form.Item
+                          name="name"
+                          label="Dealer Name"
+                          rules={[{ required: true, message: 'Please enter dealer name' }]}
+                        >
+                          <Input placeholder="Enter dealer name" />
+                        </Form.Item>
+                      </Col>
+                      <Col span={12}>
+                        <Form.Item
+                          name="dealerCode"
+                          label="Dealer Code"
+                          tooltip="Leave blank to auto-generate based on tenant"
+                        >
+                          <Input placeholder="e.g. DLR-001 (Optional)" />
+                        </Form.Item>
+                      </Col>
+                    </Row>
 
-              <Row gutter={16}>
-                <Col span={24}>
-                  <Form.Item
-                    name="businessName"
-                    label="Business Name"
-                  >
-                    <Input placeholder="Enter business name" />
-                  </Form.Item>
-                </Col>
-              </Row>
+                    <Row gutter={16}>
+                      <Col span={24}>
+                        <Form.Item
+                          name="businessName"
+                          label="Business Name"
+                        >
+                          <Input placeholder="Enter business name" />
+                        </Form.Item>
+                      </Col>
+                    </Row>
 
-              <Form.Item
-                name="dealerGroup"
-                label="Dealer Group"
-                rules={[{ message: 'Please select dealer group' }]}
-              >
-                <Select placeholder="Select dealer group">
-                  {dealerGroups.map(group => (
-                    <Option key={group.value} value={group.value}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div
-                          style={{
-                            width: 12,
-                            height: 12,
-                            borderRadius: '50%',
-                            backgroundColor: group.color,
-                          }}
-                        />
-                        {group.label}
-                      </div>
-                    </Option>
-                  ))}
-                </Select>
-              </Form.Item>
+                    <Form.Item
+                      name="dealerGroup"
+                      label="Dealer Group"
+                      rules={[{ message: 'Please select dealer group' }]}
+                    >
+                      <Select placeholder="Select dealer group">
+                        {dealerGroups.map(group => (
+                          <Option key={group.value} value={group.value}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <div
+                                style={{
+                                  width: 12,
+                                  height: 12,
+                                  borderRadius: '50%',
+                                  backgroundColor: group.color,
+                                }}
+                              />
+                              {group.label}
+                            </div>
+                          </Option>
+                        ))}
+                      </Select>
+                    </Form.Item>
 
-              <Form.Item
-                name="route"
-                label="Delivery Route"
-              >
-                <Select placeholder="Select delivery route" allowClear>
-                  {routes.map(route => (
-                    <Option key={route._id} value={route._id}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ fontSize: '12px', color: '#666' }}>
-                          {route.code}
-                        </div>
-                        <div>{route.name}</div>
-                        {route.city && (
-                          <div style={{ fontSize: '12px', color: '#888' }}>
-                            ({route.city})
-                          </div>
-                        )}
-                      </div>
-                    </Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Tabs.TabPane>
+                    <Form.Item
+                      name="route"
+                      label="Delivery Route"
+                    >
+                      <Select placeholder="Select delivery route" allowClear>
+                        {routes.map(route => (
+                          <Option key={route._id} value={route._id}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <div style={{ fontSize: '12px', color: '#666' }}>
+                                {route.code}
+                              </div>
+                              <div>{route.name}</div>
+                              {route.city && (
+                                <div style={{ fontSize: '12px', color: '#888' }}>
+                                  ({route.city})
+                                </div>
+                              )}
+                            </div>
+                          </Option>
+                        ))}
+                      </Select>
+                    </Form.Item>
+                  </>
+                )
+              },
+              {
+                key: 'contact',
+                label: 'Contact Information',
+                forceRender: true,
+                children: (
+                  <>
+                    <Row gutter={16}>
+                      <Col span={12}>
+                        <Form.Item
+                          name={['contactInfo', 'primaryPhone']}
+                          label="Primary Phone"
+                          rules={[{ required: true, message: 'Please enter primary phone' }]}
+                        >
+                          <Input placeholder="Enter primary phone" />
+                        </Form.Item>
+                      </Col>
+                      <Col span={12}>
+                        <Form.Item
+                          name={['contactInfo', 'secondaryPhone']}
+                          label="Secondary Phone"
+                        >
+                          <Input placeholder="Enter secondary phone" />
+                        </Form.Item>
+                      </Col>
+                    </Row>
 
-            <Tabs.TabPane tab="Contact Information" key="contact" forceRender={true}>
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item
-                    name={['contactInfo', 'primaryPhone']}
-                    label="Primary Phone"
-                    rules={[{ required: true, message: 'Please enter primary phone' }]}
-                  >
-                    <Input placeholder="Enter primary phone" />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item
-                    name={['contactInfo', 'secondaryPhone']}
-                    label="Secondary Phone"
-                  >
-                    <Input placeholder="Enter secondary phone" />
-                  </Form.Item>
-                </Col>
-              </Row>
+                    <Row gutter={16}>
+                      <Col span={12}>
+                        <Form.Item
+                          name={['contactInfo', 'email']}
+                          label="Email"
+                          rules={[{ type: 'email', message: 'Please enter valid email' }]}
+                        >
+                          <Input placeholder="Enter email address" />
+                        </Form.Item>
+                      </Col>
+                      <Col span={12}>
+                        <Form.Item
+                          name={['contactInfo', 'whatsapp']}
+                          label="WhatsApp Number"
+                        >
+                          <Input placeholder="Enter WhatsApp number" />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                  </>
+                )
+              },
+              {
+                key: 'address',
+                label: 'Address',
+                forceRender: true,
+                children: (
+                  <>
+                    <Form.Item
+                      name={['address', 'street']}
+                      label="Street Address"
+                      rules={[{ required: true, message: 'Please enter street address' }]}
+                    >
+                      <TextArea rows={2} placeholder="Enter street address" />
+                    </Form.Item>
 
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item
-                    name={['contactInfo', 'email']}
-                    label="Email"
-                    rules={[{ type: 'email', message: 'Please enter valid email' }]}
-                  >
-                    <Input placeholder="Enter email address" />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item
-                    name={['contactInfo', 'whatsapp']}
-                    label="WhatsApp Number"
-                  >
-                    <Input placeholder="Enter WhatsApp number" />
-                  </Form.Item>
-                </Col>
-              </Row>
-            </Tabs.TabPane>
+                    <Row gutter={16}>
+                      <Col span={8}>
+                        <Form.Item
+                          name={['address', 'city']}
+                          label="City"
+                          rules={[{ required: true, message: 'Please enter city' }]}
+                        >
+                          <Input placeholder="Enter city" />
+                        </Form.Item>
+                      </Col>
+                      <Col span={8}>
+                        <Form.Item
+                          name={['address', 'state']}
+                          label="State"
+                          rules={[{ required: true, message: 'Please enter state' }]}
+                        >
+                          <Input placeholder="Enter state" />
+                        </Form.Item>
+                      </Col>
+                      <Col span={8}>
+                        <Form.Item
+                          name={['address', 'postalCode']}
+                          label="Postal Code"
+                          rules={[
+                            { required: true, message: 'Please enter postal code' },
+                            { pattern: /^[0-9]{6}$/, message: 'Please enter valid 6-digit postal code' }
+                          ]}
+                        >
+                          <Input placeholder="Enter postal code" />
+                        </Form.Item>
+                      </Col>
+                    </Row>
 
-            <Tabs.TabPane tab="Address" key="address" forceRender={true}>
-              <Form.Item
-                name={['address', 'street']}
-                label="Street Address"
-                rules={[{ required: true, message: 'Please enter street address' }]}
-              >
-                <TextArea rows={2} placeholder="Enter street address" />
-              </Form.Item>
+                    <Form.Item
+                      name={['address', 'landmark']}
+                      label="Landmark"
+                    >
+                      <Input placeholder="Enter landmark (optional)" />
+                    </Form.Item>
+                  </>
+                )
+              },
+              {
+                key: 'financial',
+                label: 'Financial Information',
+                forceRender: true,
+                children: (
+                  <>
+                    <Row gutter={16}>
+                      <Col span={12}>
+                        <Form.Item
+                          name={['financialInfo', 'openingBalance']}
+                          label="Opening Balance"
+                          rules={[{ required: true, message: 'Please enter opening balance' }]}
+                        >
+                          <InputNumber
+                            style={{ width: '100%' }}
+                            placeholder="0.00"
+                            prefix="₹"
+                            min={0}
+                            step={0.01}
+                            precision={2}
+                          />
+                        </Form.Item>
+                      </Col>
+                      <Col span={12}>
+                        <Form.Item
+                          name={['financialInfo', 'openingBalanceType']}
+                          label="Balance Type"
+                          rules={[{ required: true, message: 'Please select balance type' }]}
+                        >
+                          <Select placeholder="Select balance type">
+                            <Option value="credit">Credit (Amount owed to dealer)</Option>
+                            <Option value="debit">Debit (Amount dealer owes)</Option>
+                          </Select>
+                        </Form.Item>
+                      </Col>
+                    </Row>
 
-              <Row gutter={16}>
-                <Col span={8}>
-                  <Form.Item
-                    name={['address', 'city']}
-                    label="City"
-                    rules={[{ required: true, message: 'Please enter city' }]}
-                  >
-                    <Input placeholder="Enter city" />
-                  </Form.Item>
-                </Col>
-                <Col span={8}>
-                  <Form.Item
-                    name={['address', 'state']}
-                    label="State"
-                    rules={[{ required: true, message: 'Please enter state' }]}
-                  >
-                    <Input placeholder="Enter state" />
-                  </Form.Item>
-                </Col>
-                <Col span={8}>
-                  <Form.Item
-                    name={['address', 'postalCode']}
-                    label="Postal Code"
-                    rules={[
-                      { required: true, message: 'Please enter postal code' },
-                      { pattern: /^[0-9]{6}$/, message: 'Please enter valid 6-digit postal code' }
-                    ]}
-                  >
-                    <Input placeholder="Enter postal code" />
-                  </Form.Item>
-                </Col>
-              </Row>
+                    <Row gutter={16}>
+                      <Col span={8}>
+                        <Form.Item
+                          name={['financialInfo', 'creditLimit']}
+                          label="Credit Limit"
+                        >
+                          <InputNumber
+                            style={{ width: '100%' }}
+                            placeholder="0"
+                            prefix="₹"
+                            min={0}
+                            formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                            parser={value => value.replace(/₹\s?|(,*)/g, '')}
+                          />
+                        </Form.Item>
+                      </Col>
+                      <Col span={8}>
+                        <Form.Item
+                          name={['financialInfo', 'creditDays']}
+                          label="Credit Days"
+                        >
+                          <InputNumber
+                            style={{ width: '100%' }}
+                            placeholder="0"
+                            suffix="days"
+                            min={0}
+                          />
+                        </Form.Item>
+                      </Col>
+                      <Col span={8}>
+                        <Form.Item
+                          name={['financialInfo', 'discountPercentage']}
+                          label="Discount %"
+                        >
+                          <InputNumber
+                            style={{ width: '100%' }}
+                            placeholder="0"
+                            suffix="%"
+                            min={0}
+                            max={100}
+                            step={0.1}
+                          />
+                        </Form.Item>
+                      </Col>
+                    </Row>
 
-              <Form.Item
-                name={['address', 'landmark']}
-                label="Landmark"
-              >
-                <Input placeholder="Enter landmark (optional)" />
-              </Form.Item>
-            </Tabs.TabPane>
-
-            <Tabs.TabPane tab="Financial Information" key="financial" forceRender={true}>
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item
-                    name={['financialInfo', 'openingBalance']}
-                    label="Opening Balance"
-                    rules={[{ required: true, message: 'Please enter opening balance' }]}
-                  >
-                    <InputNumber
-                      style={{ width: '100%' }}
-                      placeholder="0.00"
-                      prefix="₹"
-                      min={0}
-                      step={0.01}
-                      precision={2}
-                    />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item
-                    name={['financialInfo', 'openingBalanceType']}
-                    label="Balance Type"
-                    rules={[{ required: true, message: 'Please select balance type' }]}
-                  >
-                    <Select placeholder="Select balance type">
-                      <Option value="credit">Credit (Amount owed to dealer)</Option>
-                      <Option value="debit">Debit (Amount dealer owes)</Option>
-                    </Select>
-                  </Form.Item>
-                </Col>
-              </Row>
-
-              <Row gutter={16}>
-                <Col span={8}>
-                  <Form.Item
-                    name={['financialInfo', 'creditLimit']}
-                    label="Credit Limit"
-                  >
-                    <InputNumber
-                      style={{ width: '100%' }}
-                      placeholder="0"
-                      prefix="₹"
-                      min={0}
-                      formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                      parser={value => value.replace(/₹\s?|(,*)/g, '')}
-                    />
-                  </Form.Item>
-                </Col>
-                <Col span={8}>
-                  <Form.Item
-                    name={['financialInfo', 'creditDays']}
-                    label="Credit Days"
-                  >
-                    <InputNumber
-                      style={{ width: '100%' }}
-                      placeholder="0"
-                      suffix="days"
-                      min={0}
-                    />
-                  </Form.Item>
-                </Col>
-                <Col span={8}>
-                  <Form.Item
-                    name={['financialInfo', 'discountPercentage']}
-                    label="Discount %"
-                  >
-                    <InputNumber
-                      style={{ width: '100%' }}
-                      placeholder="0"
-                      suffix="%"
-                      min={0}
-                      max={100}
-                      step={0.1}
-                    />
-                  </Form.Item>
-                </Col>
-              </Row>
-
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item
-                    name={['financialInfo', 'panNumber']}
-                    label="PAN Number"
-                    rules={[
-                      {
-                        validator: (_, value) => {
-                          if (!value || value.trim() === '') {
-                            return Promise.resolve(); // Allow empty values
-                          }
-                          if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(value)) {
-                            return Promise.reject(new Error('Please enter valid PAN number (e.g., ABCDE1234F)'));
-                          }
-                          return Promise.resolve();
-                        }
-                      }
-                    ]}
-                  >
-                    <Input placeholder="ABCDE1234F (optional)" />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item
-                    name={['financialInfo', 'gstNumber']}
-                    label="GST Number"
-                    rules={[
-                      {
-                        validator: (_, value) => {
-                          if (!value || value.trim() === '') {
-                            return Promise.resolve(); // Allow empty values
-                          }
-                          if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(value)) {
-                            return Promise.reject(new Error('Please enter valid GST number (e.g., 22ABCDE1234F1Z5)'));
-                          }
-                          return Promise.resolve();
-                        }
-                      }
-                    ]}
-                  >
-                    <Input placeholder="22ABCDE1234F1Z5 (optional)" />
-                  </Form.Item>
-                </Col>
-              </Row>
-            </Tabs.TabPane>
-          </Tabs>
+                    <Row gutter={16}>
+                      <Col span={12}>
+                        <Form.Item
+                          name={['financialInfo', 'panNumber']}
+                          label="PAN Number"
+                          rules={[
+                            {
+                              validator: (_, value) => {
+                                if (!value || value.trim() === '') {
+                                  return Promise.resolve(); // Allow empty values
+                                }
+                                if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(value)) {
+                                  return Promise.reject(new Error('Please enter valid PAN number (e.g., ABCDE1234F)'));
+                                }
+                                return Promise.resolve();
+                              }
+                            }
+                          ]}
+                        >
+                          <Input placeholder="ABCDE1234F (optional)" />
+                        </Form.Item>
+                      </Col>
+                      <Col span={12}>
+                        <Form.Item
+                          name={['financialInfo', 'gstNumber']}
+                          label="GST Number"
+                          rules={[
+                            {
+                              validator: (_, value) => {
+                                if (!value || value.trim() === '') {
+                                  return Promise.resolve(); // Allow empty values
+                                }
+                                if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(value)) {
+                                  return Promise.reject(new Error('Please enter valid GST number (e.g., 22ABCDE1234F1Z5)'));
+                                }
+                                return Promise.resolve();
+                              }
+                            }
+                          ]}
+                        >
+                          <Input placeholder="22ABCDE1234F1Z5 (optional)" />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                  </>
+                )
+              }
+            ]}
+          />
 
           <Form.Item style={{ marginBottom: 0, textAlign: 'right', marginTop: 16 }}>
             <Space>
@@ -1051,190 +1079,199 @@ const Dealers = () => {
         width={900}
       >
         {selectedDealer && (
-          <Tabs defaultActiveKey="details">
-            <Tabs.TabPane tab="Basic Details" key="details">
-              <Descriptions bordered column={2}>
-                <Descriptions.Item label="Dealer Code">{selectedDealer.dealerCode}</Descriptions.Item>
-                <Descriptions.Item label="Business Name">{selectedDealer.businessName || 'N/A'}</Descriptions.Item>
-                <Descriptions.Item label="Group">
-                  <Tag color={selectedDealer.dealerGroup?.color}>
-                    {selectedDealer.dealerGroup?.name}
-                  </Tag>
-                </Descriptions.Item>
-                <Descriptions.Item label="Route">
-                  {selectedDealer.route ? (
-                    <div>
-                      <div><strong>{selectedDealer.route.code}</strong> - {selectedDealer.route.name}</div>
-                      {selectedDealer.route.city && (
-                        <div style={{ fontSize: '12px', color: '#666' }}>
-                          {selectedDealer.route.city}, {selectedDealer.route.state}
+          <Tabs
+            defaultActiveKey="details"
+            items={[
+              {
+                key: 'details',
+                label: 'Basic Details',
+                children: (
+                  <Descriptions bordered column={2}>
+                    <Descriptions.Item label="Dealer Code">{selectedDealer.dealerCode}</Descriptions.Item>
+                    <Descriptions.Item label="Business Name">{selectedDealer.businessName || 'N/A'}</Descriptions.Item>
+                    <Descriptions.Item label="Group">
+                      <Tag color={selectedDealer.dealerGroup?.color}>
+                        {selectedDealer.dealerGroup?.name}
+                      </Tag>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Route">
+                      {selectedDealer.route ? (
+                        <div>
+                          <div><strong>{selectedDealer.route.code}</strong> - {selectedDealer.route.name}</div>
+                          {selectedDealer.route.city && (
+                            <div style={{ fontSize: '12px', color: '#666' }}>
+                              {selectedDealer.route.city}, {selectedDealer.route.state}
+                            </div>
+                          )}
                         </div>
+                      ) : (
+                        <span style={{ color: '#ccc' }}>No route assigned</span>
                       )}
-                    </div>
-                  ) : (
-                    <span style={{ color: '#ccc' }}>No route assigned</span>
-                  )}
-                </Descriptions.Item>
-                <Descriptions.Item label="Status">
-                  <Tag color={selectedDealer.status === 'active' ? 'green' : 'red'}>
-                    {selectedDealer.status?.toUpperCase()}
-                  </Tag>
-                </Descriptions.Item>
-                <Descriptions.Item label="Primary Phone">{selectedDealer.contactInfo.primaryPhone}</Descriptions.Item>
-                <Descriptions.Item label="Email">{selectedDealer.contactInfo.email || 'N/A'}</Descriptions.Item>
-                <Descriptions.Item label="Address" span={2}>
-                  {selectedDealer.fullAddress}
-                </Descriptions.Item>
-                <Descriptions.Item label="Current Balance">
-                  <Tag color={getBalanceColor(selectedDealer.financialInfo.currentBalance)}>
-                    ₹{Math.abs(selectedDealer.financialInfo.currentBalance).toLocaleString()}
-                    {selectedDealer.financialInfo.currentBalance !== 0 &&
-                      (selectedDealer.financialInfo.currentBalance > 0 ? ' DR' : ' CR')
-                    }
-                  </Tag>
-                </Descriptions.Item>
-                <Descriptions.Item label="Opening Balance">
-                  {selectedDealer.financialInfo?.openingBalanceType === 'credit' ? (
-                    <Tag color="green">
-                      ₹{(selectedDealer.financialInfo?.openingBalance || 0).toLocaleString()} CR
-                    </Tag>
-                  ) : (
-                    <Tag color="red">
-                      ₹{(selectedDealer.financialInfo?.openingBalance || 0).toLocaleString()} DR
-                    </Tag>
-                  )}
-                </Descriptions.Item>
-                <Descriptions.Item label="Credit Limit">
-                  ₹{(selectedDealer.financialInfo.creditLimit || 0).toLocaleString()}
-                </Descriptions.Item>
-                <Descriptions.Item label="Credit Days">{selectedDealer.financialInfo?.creditDays || 0} days</Descriptions.Item>
-                <Descriptions.Item label="PAN Number">{selectedDealer.financialInfo.panNumber || 'N/A'}</Descriptions.Item>
-                <Descriptions.Item label="GST Number">{selectedDealer.financialInfo.gstNumber || 'N/A'}</Descriptions.Item>
-              </Descriptions>
-            </Tabs.TabPane>
-
-            <Tabs.TabPane
-              tab={
-                <Space>
-                  <DollarOutlined />
-                  Pricing
-                </Space>
-              }
-              key="pricing"
-            >
-              <DealerPricing
-                dealerId={selectedDealer._id}
-                dealerName={selectedDealer.name}
-              />
-            </Tabs.TabPane>
-
-            <Tabs.TabPane
-              tab={
-                <Space>
-                  <HistoryOutlined />
-                  Transaction History
-                  {dealerTransactions.length > 0 && (
-                    <Tag color="blue">{dealerTransactions.length}</Tag>
-                  )}
-                </Space>
-              }
-              key="transactions"
-            >
-              <div style={{ marginBottom: 16 }}>
-                <Row gutter={16}>
-                  <Col span={8}>
-                    <Statistic
-                      title="Total Credits"
-                      value={dealerTransactions
-                        .filter(t => t.type === 'credit')
-                        .reduce((sum, t) => sum + t.amount, 0)
-                      }
-                      prefix="₹"
-                      valueStyle={{ color: '#52c41a' }}
-                    />
-                  </Col>
-                  <Col span={8}>
-                    <Statistic
-                      title="Total Debits"
-                      value={dealerTransactions
-                        .filter(t => t.type === 'debit')
-                        .reduce((sum, t) => sum + t.amount, 0)
-                      }
-                      prefix="₹"
-                      valueStyle={{ color: '#f5222d' }}
-                    />
-                  </Col>
-                  <Col span={8}>
-                    <Statistic
-                      title="Transactions"
-                      value={dealerTransactions.length}
-                      prefix={<TransactionOutlined />}
-                    />
-                  </Col>
-                </Row>
-              </div>
-
-              <Divider />
-
-              {transactionLoading ? (
-                <div style={{ textAlign: 'center', padding: '40px' }}>
-                  <Space direction="vertical">
-                    <HistoryOutlined style={{ fontSize: '24px' }} />
-                    <Text>Loading transaction history...</Text>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Status">
+                      <Tag color={selectedDealer.status === 'active' ? 'green' : 'red'}>
+                        {selectedDealer.status?.toUpperCase()}
+                      </Tag>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Primary Phone">{selectedDealer.contactInfo.primaryPhone}</Descriptions.Item>
+                    <Descriptions.Item label="Email">{selectedDealer.contactInfo.email || 'N/A'}</Descriptions.Item>
+                    <Descriptions.Item label="Address" span={2}>
+                      {selectedDealer.fullAddress}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Current Balance">
+                      <Tag color={getBalanceColor(selectedDealer.financialInfo.currentBalance)}>
+                        ₹{Math.abs(selectedDealer.financialInfo.currentBalance).toLocaleString()}
+                        {selectedDealer.financialInfo.currentBalance !== 0 &&
+                          (selectedDealer.financialInfo.currentBalance > 0 ? ' DR' : ' CR')
+                        }
+                      </Tag>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Opening Balance">
+                      {selectedDealer.financialInfo?.openingBalanceType === 'credit' ? (
+                        <Tag color="green">
+                          ₹{(selectedDealer.financialInfo?.openingBalance || 0).toLocaleString()} CR
+                        </Tag>
+                      ) : (
+                        <Tag color="red">
+                          ₹{(selectedDealer.financialInfo?.openingBalance || 0).toLocaleString()} DR
+                        </Tag>
+                      )}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Credit Limit">
+                      ₹{(selectedDealer.financialInfo.creditLimit || 0).toLocaleString()}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Credit Days">{selectedDealer.financialInfo?.creditDays || 0} days</Descriptions.Item>
+                    <Descriptions.Item label="PAN Number">{selectedDealer.financialInfo.panNumber || 'N/A'}</Descriptions.Item>
+                    <Descriptions.Item label="GST Number">{selectedDealer.financialInfo.gstNumber || 'N/A'}</Descriptions.Item>
+                  </Descriptions>
+                )
+              },
+              {
+                key: 'pricing',
+                label: (
+                  <Space>
+                    <DollarOutlined />
+                    Pricing
                   </Space>
-                </div>
-              ) : dealerTransactions.length > 0 ? (
-                <Timeline mode="left">
-                  {dealerTransactions.map((transaction, index) => (
-                    <Timeline.Item
-                      key={transaction.key}
-                      color={transaction.type === 'credit' ? 'green' : 'red'}
-                      dot={transaction.type === 'credit' ? <RiseOutlined /> : <FallOutlined />}
-                      label={
-                        <Text type="secondary">
-                          {new Date(transaction.date).toLocaleDateString('en-IN', {
-                            day: '2-digit',
-                            month: 'short',
-                            year: 'numeric'
-                          })}
-                        </Text>
-                      }
-                    >
-                      <Card size="small" style={{ marginBottom: 8 }}>
-                        <Space direction="vertical" style={{ width: '100%' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Text strong style={{ fontSize: '16px' }}>
-                              {transaction.type === 'credit' ? '+' : '-'}₹{transaction.amount.toLocaleString()}
-                            </Text>
-                            <Tag color={transaction.type === 'credit' ? 'green' : 'red'}>
-                              {transaction.type.toUpperCase()}
-                            </Tag>
-                          </div>
-                          <Text>{transaction.description}</Text>
-                          {transaction.reference && (
-                            <Text type="secondary" style={{ fontSize: '12px' }}>
-                              Reference: {transaction.reference.id || transaction.reference}
-                            </Text>
-                          )}
-                          {transaction.balanceAfter !== undefined && (
-                            <Text type="secondary" style={{ fontSize: '12px' }}>
-                              Balance After: ₹{Math.abs(transaction.balanceAfter).toLocaleString()}
-                              {transaction.balanceAfter > 0 ? ' DR' : transaction.balanceAfter < 0 ? ' CR' : ''}
-                            </Text>
-                          )}
+                ),
+                children: (
+                  <DealerPricing
+                    dealerId={selectedDealer._id}
+                    dealerName={selectedDealer.name}
+                  />
+                )
+              },
+              {
+                key: 'transactions',
+                label: (
+                  <Space>
+                    <HistoryOutlined />
+                    Transaction History
+                    {dealerTransactions.length > 0 && (
+                      <Tag color="blue">{dealerTransactions.length}</Tag>
+                    )}
+                  </Space>
+                ),
+                children: (
+                  <>
+                    <div style={{ marginBottom: 16 }}>
+                      <Row gutter={16}>
+                        <Col span={8}>
+                          <Statistic
+                            title="Total Credits"
+                            value={dealerTransactions
+                              .filter(t => t.type === 'credit')
+                              .reduce((sum, t) => sum + t.amount, 0)
+                            }
+                            prefix="₹"
+                            valueStyle={{ color: '#52c41a' }}
+                          />
+                        </Col>
+                        <Col span={8}>
+                          <Statistic
+                            title="Total Debits"
+                            value={dealerTransactions
+                              .filter(t => t.type === 'debit')
+                              .reduce((sum, t) => sum + t.amount, 0)
+                            }
+                            prefix="₹"
+                            valueStyle={{ color: '#f5222d' }}
+                          />
+                        </Col>
+                        <Col span={8}>
+                          <Statistic
+                            title="Transactions"
+                            value={dealerTransactions.length}
+                            prefix={<TransactionOutlined />}
+                          />
+                        </Col>
+                      </Row>
+                    </div>
+
+                    <Divider />
+
+                    {transactionLoading ? (
+                      <div style={{ textAlign: 'center', padding: '40px' }}>
+                        <Space direction="vertical">
+                          <HistoryOutlined style={{ fontSize: '24px' }} />
+                          <Text>Loading transaction history...</Text>
                         </Space>
-                      </Card>
-                    </Timeline.Item>
-                  ))}
-                </Timeline>
-              ) : (
-                <Empty
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="No transaction history found"
-                />
-              )}
-            </Tabs.TabPane>
-          </Tabs>
+                      </div>
+                    ) : dealerTransactions.length > 0 ? (
+                      <Timeline mode="left">
+                        {dealerTransactions.map((transaction, index) => (
+                          <Timeline.Item
+                            key={transaction.key}
+                            color={transaction.type === 'credit' ? 'green' : 'red'}
+                            dot={transaction.type === 'credit' ? <RiseOutlined /> : <FallOutlined />}
+                            label={
+                              <Text type="secondary">
+                                {new Date(transaction.date).toLocaleDateString('en-IN', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric'
+                                })}
+                              </Text>
+                            }
+                          >
+                            <Card size="small" style={{ marginBottom: 8 }}>
+                              <Space direction="vertical" style={{ width: '100%' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text strong style={{ fontSize: '16px' }}>
+                                    {transaction.type === 'credit' ? '+' : '-'}₹{transaction.amount.toLocaleString()}
+                                  </Text>
+                                  <Tag color={transaction.type === 'credit' ? 'green' : 'red'}>
+                                    {transaction.type.toUpperCase()}
+                                  </Tag>
+                                </div>
+                                <Text>{transaction.description}</Text>
+                                {transaction.reference && (
+                                  <Text type="secondary" style={{ fontSize: '12px' }}>
+                                    Reference: {transaction.reference.id || transaction.reference}
+                                  </Text>
+                                )}
+                                {transaction.balanceAfter !== undefined && (
+                                  <Text type="secondary" style={{ fontSize: '12px' }}>
+                                    Balance After: ₹{Math.abs(transaction.balanceAfter).toLocaleString()}
+                                    {transaction.balanceAfter > 0 ? ' DR' : transaction.balanceAfter < 0 ? ' CR' : ''}
+                                  </Text>
+                                )}
+                              </Space>
+                            </Card>
+                          </Timeline.Item>
+                        ))}
+                      </Timeline>
+                    ) : (
+                      <Empty
+                        image={Empty.PRESENTED_IMAGE_SIMPLE}
+                        description="No transaction history found"
+                      />
+                    )}
+                  </>
+                )
+              }
+            ]}
+          />
         )}
       </Modal>
     </div>

@@ -237,6 +237,12 @@ const Settings = () => {
           gstNumber: companyData.businessInfo?.gstNumber,
           profitMargin: companyData.businessInfo?.profitMargin || 0,
         },
+        settings: {
+          payroll: {
+            startDay: companyData.settings?.payroll?.startDay || 1,
+            endDay: companyData.settings?.payroll?.endDay || 30
+          }
+        }
       });
     } catch (error) {
       console.error('Error fetching company profile:', error);

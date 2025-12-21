@@ -52,6 +52,11 @@ const Inventory = () => {
     total: 0,
   });
 
+  // Bulk Update State
+  const [selectedRowKeys, setSelectedRowKeys] = useState([]);
+  const [bulkModalVisible, setBulkModalVisible] = useState(false);
+  const [bulkUpdateValues, setBulkUpdateValues] = useState({}); // { [id]: quantity }
+
   useEffect(() => {
     fetchInventory();
     fetchProducts();
@@ -72,12 +77,12 @@ const Inventory = () => {
       console.log('Fetching inventory with params:', params);
       const response = await inventoryAPI.getInventory(params);
       console.log('Inventory API response:', response.data); // Debug log
-      
+
       if (response.data.success) {
         const { inventoryItems: data, pagination: paginationData } = response.data.data;
         console.log('Inventory items received:', data);
         console.log('Pagination data:', paginationData);
-        
+
         setInventory(data || []);
         setPagination(prev => ({
           ...prev,
@@ -90,7 +95,7 @@ const Inventory = () => {
     } catch (error) {
       console.error('Error fetching inventory:', error);
       console.error('Error details:', error.response?.data);
-      
+
       // Use empty array as fallback
       console.log('Using empty inventory data as fallback');
       setInventory([]);
@@ -242,35 +247,35 @@ const Inventory = () => {
   const handleProductChange = (productId) => {
     // Find the selected product
     const selectedProduct = products.find(p => p._id === productId);
-    
+
     if (selectedProduct) {
       console.log('Selected product:', selectedProduct);
-      
+
       // Update form fields with product data
       const fieldsToUpdate = {};
-      
+
       if (selectedProduct.price) {
         // Set average cost to the product's cost price
         if (selectedProduct.price.cost !== undefined) {
           fieldsToUpdate.averageCost = selectedProduct.price.cost;
         }
-        
+
         // Set last purchase price to the product's selling price
         if (selectedProduct.price.selling !== undefined) {
           fieldsToUpdate.lastPurchasePrice = selectedProduct.price.selling;
         }
       }
-      
+
       // Set GST fields
       if (selectedProduct.tax) {
         fieldsToUpdate.igst = selectedProduct.tax.igst || 0;
         fieldsToUpdate.cgst = selectedProduct.tax.cgst || 0;
         fieldsToUpdate.sgst = selectedProduct.tax.sgst || 0;
-        
-        const gstTotal = (selectedProduct.tax.igst || 0) + 
-                        (selectedProduct.tax.cgst || 0) + 
-                        (selectedProduct.tax.sgst || 0);
-        
+
+        const gstTotal = (selectedProduct.tax.igst || 0) +
+          (selectedProduct.tax.cgst || 0) +
+          (selectedProduct.tax.sgst || 0);
+
         console.log('Product GST:', {
           igst: selectedProduct.tax.igst,
           cgst: selectedProduct.tax.cgst,
@@ -278,10 +283,10 @@ const Inventory = () => {
           total: gstTotal
         });
       }
-      
+
       // Update all fields at once
       form.setFieldsValue(fieldsToUpdate);
-      
+
       message.success(`Prices and GST loaded from product: ${selectedProduct.name}`);
     }
   };
@@ -293,7 +298,7 @@ const Inventory = () => {
       console.log('Editing inventory item:', item);
       console.log('Product data:', item.product);
       console.log('Warehouse data:', item.location?.warehouse);
-      
+
       const currentBatch = getCurrentBatch(item.batches);
       const formValues = {
         product: item.product?._id,
@@ -316,7 +321,7 @@ const Inventory = () => {
         cgst: item.tax?.cgst || 0,
         sgst: item.tax?.sgst || 0,
       };
-      
+
       console.log('Setting form values:', formValues);
       form.setFieldsValue(formValues);
     } else {
@@ -390,25 +395,25 @@ const Inventory = () => {
       setModalVisible(false);
       setEditingItem(null);
       form.resetFields();
-      
+
       // Refresh inventory data
       console.log('Refreshing inventory data...');
       await fetchInventory();
     } catch (error) {
       console.error('Error saving inventory item:', error);
       console.error('Error response:', error.response?.data);
-      
+
       let errorMessage = 'Failed to save inventory item';
       if (error.response?.data?.message) {
         errorMessage = error.response.data.message;
-        
+
         if (errorMessage.includes('already exists')) {
           errorMessage = `Inventory already exists for this product in ${values.warehouse}. Please update the existing inventory instead.`;
         } else if (errorMessage.includes('validation')) {
           errorMessage = 'Please check all required fields and try again.';
         }
       }
-      
+
       message.error(errorMessage);
     }
   };
@@ -426,13 +431,13 @@ const Inventory = () => {
   const handleStockMovementSubmit = async (values) => {
     try {
       console.log('Stock movement form values:', values);
-      
+
       // Validate quantity
       if (!values.quantity || values.quantity <= 0) {
         message.error('Please enter a valid quantity');
         return;
       }
-      
+
       // Ensure quantity is an integer
       const quantity = parseInt(values.quantity);
       if (isNaN(quantity) || quantity <= 0) {
@@ -445,7 +450,7 @@ const Inventory = () => {
         quantity: quantity,
         reason: values.reason || 'Stock Adjustment',
       });
-      
+
       message.success('Stock added successfully');
       setStockModalVisible(false);
       stockForm.resetFields();
@@ -454,7 +459,7 @@ const Inventory = () => {
       console.error('Error updating stock:', error);
       const errorMessage = error.response?.data?.message || 'Failed to update stock';
       message.error(errorMessage);
-      
+
       // Log detailed error for debugging
       if (error.response?.data?.errors) {
         console.error('Validation errors:', error.response.data.errors);
@@ -480,6 +485,55 @@ const Inventory = () => {
     }
   };
 
+  // Bulk Update Handlers
+  const onSelectChange = (newSelectedRowKeys) => {
+    setSelectedRowKeys(newSelectedRowKeys);
+  };
+
+  const handleBulkUpdateClick = () => {
+    // Initialize bulk values with current stock for ALL items
+    const initialValues = {};
+    inventory.forEach(item => {
+      initialValues[item._id] = item.stock?.available || 0;
+    });
+    setBulkUpdateValues(initialValues);
+    setBulkModalVisible(true);
+  };
+
+  const handleBulkUpdateChange = (id, value) => {
+    setBulkUpdateValues(prev => ({ ...prev, [id]: value }));
+  };
+
+  const handleBulkSubmit = async () => {
+    try {
+      // Collect updates for items that have changed
+      const updates = [];
+      inventory.forEach(item => {
+        const newVal = bulkUpdateValues[item._id];
+        const currentVal = item.stock?.available || 0;
+        if (newVal !== undefined && newVal !== currentVal) {
+          updates.push({
+            inventoryId: item._id,
+            newQuantity: newVal
+          });
+        }
+      });
+
+      if (updates.length === 0) {
+        message.info("No changes detected");
+        return;
+      }
+
+      await inventoryAPI.bulkUpdate({ updates, reason: 'Bulk Stock Update via Admin UI' });
+      message.success(`Updated ${updates.length} items successfully`);
+      setBulkModalVisible(false);
+      fetchInventory();
+    } catch (error) {
+      console.error("Bulk update error:", error);
+      message.error("Failed to process bulk update");
+    }
+  };
+
   const getStatusColor = (status) => {
     const colors = {
       good: 'green',
@@ -502,7 +556,7 @@ const Inventory = () => {
     const reserved = item.stock?.reserved || 0;
     const actualAvailable = totalStock - reserved; // Calculate actual available stock
     const minimum = item.thresholds?.minimum || 0;
-    
+
     if (actualAvailable === 0) return 'out_of_stock';
     if (actualAvailable <= minimum) return 'critical';
     if (actualAvailable <= minimum * 1.5) return 'low';
@@ -512,19 +566,19 @@ const Inventory = () => {
   const getLocationString = (location) => {
     if (typeof location === 'string') return location;
     if (!location) return 'Unknown Location';
-    
+
     // Handle warehouse object or string
     let warehouseName = location.warehouse;
     if (typeof location.warehouse === 'object' && location.warehouse) {
       warehouseName = `${location.warehouse.code} - ${location.warehouse.name}`;
     }
-    
+
     let parts = [warehouseName];
     if (location.zone) parts.push(location.zone);
     if (location.aisle) parts.push(location.aisle);
     if (location.shelf) parts.push(`Shelf ${location.shelf}`);
     if (location.bin) parts.push(`Bin ${location.bin}`);
-    
+
     return parts.join(' - ');
   };
 
@@ -570,7 +624,7 @@ const Inventory = () => {
         const minimum = record.thresholds?.minimum || 0;
         const maximum = record.thresholds?.maximum || 0;
         const stockLevel = getStockLevel(actualAvailable, minimum, maximum);
-        
+
         return (
           <div>
             <div style={{ marginBottom: 4 }}>
@@ -624,11 +678,11 @@ const Inventory = () => {
       render: (_, record) => {
         const currentBatch = getCurrentBatch(record.batches);
         if (!currentBatch?.expiryDate) return 'N/A';
-        
+
         const date = currentBatch.expiryDate;
         const daysUntilExpiry = dayjs(date).diff(dayjs(), 'days');
         const color = daysUntilExpiry <= 3 ? 'red' : daysUntilExpiry <= 7 ? 'orange' : 'default';
-        
+
         return (
           <div>
             <div>{dayjs(date).format('MMM DD, YYYY')}</div>
@@ -649,7 +703,7 @@ const Inventory = () => {
         const available = totalStock - reserved; // Calculate actual available stock
         const minimum = record.thresholds?.minimum || 0;
         const currentBatch = getCurrentBatch(record.batches);
-        
+
         // Low stock alert
         if (available <= minimum && available > 0) {
           alerts.push({
@@ -658,7 +712,7 @@ const Inventory = () => {
             severity: 'error'
           });
         }
-        
+
         // Out of stock alert
         if (available === 0) {
           alerts.push({
@@ -667,7 +721,7 @@ const Inventory = () => {
             severity: 'error'
           });
         }
-        
+
         // Expiry warning
         if (currentBatch?.expiryDate) {
           const daysUntilExpiry = dayjs(currentBatch.expiryDate).diff(dayjs(), 'days');
@@ -685,7 +739,7 @@ const Inventory = () => {
             });
           }
         }
-        
+
         return (
           <div>
             {alerts.map((alert, index) => (
@@ -734,26 +788,27 @@ const Inventory = () => {
     <div>
       <div style={{ marginBottom: 24 }}>
         <Title level={2}>Stock Management</Title>
-        <div style={{ fontSize: '14px', color: '#666', marginBottom: 8 }}>
-          <strong>Current Items:</strong> {inventory.length} | 
-          <strong>Loading:</strong> {loading ? 'Yes' : 'No'} |
-          <strong>Last Fetch:</strong> {new Date().toLocaleTimeString()}
-        </div>
+        <strong>Last Fetch:</strong> {new Date().toLocaleTimeString()}
       </div>
 
+      {/* Actions Bar Removed - Merged below */}
+
+
       {/* Alerts */}
-      {inventory.length > 0 && (
-        <Alert
-          message="Inventory Alerts"
-          description={`${inventory.filter(item => getInventoryStatus(item) === 'critical' || getInventoryStatus(item) === 'out_of_stock').length} critical alerts, ${inventory.filter(item => {
-            const currentBatch = getCurrentBatch(item.batches);
-            return currentBatch?.expiryDate && dayjs(currentBatch.expiryDate).diff(dayjs(), 'days') <= 7;
-          }).length} expiry warnings`}
-          type="warning"
-          showIcon
-          style={{ marginBottom: 24 }}
-        />
-      )}
+      {
+        inventory.length > 0 && (
+          <Alert
+            message="Inventory Alerts"
+            description={`${inventory.filter(item => getInventoryStatus(item) === 'critical' || getInventoryStatus(item) === 'out_of_stock').length} critical alerts, ${inventory.filter(item => {
+              const currentBatch = getCurrentBatch(item.batches);
+              return currentBatch?.expiryDate && dayjs(currentBatch.expiryDate).diff(dayjs(), 'days') <= 7;
+            }).length} expiry warnings`}
+            type="warning"
+            showIcon
+            style={{ marginBottom: 24 }}
+          />
+        )
+      }
 
       {/* Summary Cards */}
       <Row gutter={16} style={{ marginBottom: 24 }}>
@@ -832,6 +887,12 @@ const Inventory = () => {
             <Col>
               <Space>
                 <Button
+                  onClick={handleBulkUpdateClick}
+                  icon={<EditOutlined />}
+                >
+                  Bulk Stock Update
+                </Button>
+                <Button
                   onClick={() => {
                     console.log('Manual refresh triggered');
                     setPagination(prev => ({ ...prev, current: 1 })); // Reset to page 1
@@ -882,8 +943,8 @@ const Inventory = () => {
             label="Product"
             rules={[{ required: true, message: 'Please select product' }]}
           >
-            <Select 
-              placeholder="Select product" 
+            <Select
+              placeholder="Select product"
               showSearch
               onChange={handleProductChange}
               optionFilterProp="children"
@@ -964,7 +1025,7 @@ const Inventory = () => {
               </Form.Item>
             </Col> */}
           </Row>
-          
+
           {/* <Row gutter={16}>
             <Col span={8}>
               <Form.Item
@@ -1109,26 +1170,26 @@ const Inventory = () => {
             reason: 'Adjustment'
           }}
         >
-          <Form.Item 
-            name="quantity" 
-            label="Quantity" 
+          <Form.Item
+            name="quantity"
+            label="Quantity"
             rules={[
               { required: true, message: 'Please enter quantity' },
               { type: 'number', min: 1, message: 'Quantity must be at least 1' }
             ]}
           >
-            <InputNumber 
-              min={1} 
-              style={{ width: '100%' }} 
+            <InputNumber
+              min={1}
+              style={{ width: '100%' }}
               placeholder="Enter quantity to add"
               onChange={(value) => {
                 console.log('Quantity changed:', value, typeof value);
               }}
             />
           </Form.Item>
-          <Form.Item 
-            name="reason" 
-            label="Reason" 
+          <Form.Item
+            name="reason"
+            label="Reason"
             rules={[{ required: true, message: 'Please select a reason' }]}
           >
             <Select placeholder="Select reason">
@@ -1153,6 +1214,53 @@ const Inventory = () => {
             </Space>
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* Bulk Update Modal */}
+      <Modal
+        title={`Bulk Stock Take (${inventory.length} items)`}
+        open={bulkModalVisible}
+        onOk={handleBulkSubmit}
+        onCancel={() => {
+          setBulkModalVisible(false);
+          setBulkUpdateValues({});
+        }}
+        width={900}
+        okText="Save All Adjustments"
+      >
+        <Alert
+          message="Review and update physical stock quantities. Only changed items will be updated."
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
+        <Table
+          dataSource={inventory}
+          rowKey="_id"
+          pagination={false}
+          scroll={{ y: 400 }}
+          columns={[
+            { title: 'Product', dataIndex: ['product', 'name'] },
+            { title: 'SKU', dataIndex: ['product', 'sku'] },
+            { title: 'Location', render: (_, r) => getLocationString(r.location) },
+            { title: 'Current System Stock', dataIndex: ['stock', 'available'] },
+            {
+              title: 'Actual Quantity',
+              key: 'newQuantity',
+              render: (_, record) => (
+                <InputNumber
+                  min={0}
+                  value={bulkUpdateValues[record._id] !== undefined ? bulkUpdateValues[record._id] : record.stock?.available}
+                  onChange={(val) => handleBulkUpdateChange(record._id, val)}
+                  style={{
+                    width: 120,
+                    border: bulkUpdateValues[record._id] !== undefined && bulkUpdateValues[record._id] !== record.stock?.available ? '1px solid #1890ff' : ''
+                  }}
+                />
+              )
+            }
+          ]}
+        />
       </Modal>
     </div>
   );

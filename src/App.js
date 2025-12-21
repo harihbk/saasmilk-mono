@@ -26,8 +26,13 @@ import HistoryReport from './pages/Reports/HistoryReport';
 import DealerReports from './pages/Reports/DealerReports';
 import DealerBalanceSheet from './pages/Reports/DealerBalanceSheet';
 import SimpleBalanceSheet from './pages/Reports/SimpleBalanceSheet';
+import CategoryReport from './pages/Reports/CategoryReport';
+import SubCategoryReport from './pages/Reports/SubCategoryReport';
+import GstAuditReport from './pages/Reports/GstAuditReport';
+import ProductSalesReport from './pages/Reports/ProductSalesReport';
 import PaymentHistory from './pages/Reports/PaymentHistory';
 import RouteReports from './components/RouteReports/RouteReports';
+import Payroll from './pages/Payroll/Payroll';
 import TenantManagement from './pages/SaasAdmin/TenantManagement';
 import Companies from './pages/Companies/Companies';
 import SaasAdminDashboard from './pages/SaasAdmin/SaasAdminDashboard';
@@ -128,7 +133,12 @@ function AppRoutes() {
         <Route path="reports/balance-sheet" element={<DealerBalanceSheet />} />
         <Route path="reports/simple-balance" element={<SimpleBalanceSheet />} />
         <Route path="reports/payment-history" element={<PaymentHistory />} />
+        <Route path="reports/category-wise" element={<CategoryReport />} />
+        <Route path="reports/subcategory-wise" element={<SubCategoryReport />} />
+        <Route path="reports/gst-audit" element={<GstAuditReport />} />
+        <Route path="reports/product-sales" element={<ProductSalesReport />} />
         <Route path="reports/routes" element={<RouteReports />} />
+        <Route path="payroll" element={<Payroll />} />
         <Route path="tenant-management" element={<TenantManagement />} />
         <Route path="companies" element={<CompanyManagement />} />
       </Route>

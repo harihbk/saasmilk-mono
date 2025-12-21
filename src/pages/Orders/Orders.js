@@ -39,6 +39,7 @@ import {
   MinusCircleOutlined,
   CalculatorOutlined,
   DollarOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons';
 import { ordersAPI, dealersAPI, customersAPI, dealerGroupsAPI, productsAPI, debugAPI, companiesAPI, invoicesAPI } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -95,6 +96,7 @@ const Orders = () => {
     fetchDealers();
     fetchCustomers();
     fetchProducts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.current, pagination.pageSize, searchText, statusFilter]);
 
   // Recalculate totals whenever orderItems, globalDiscount, or customAdjustment change
@@ -490,6 +492,63 @@ const Orders = () => {
     setOrderItems(updatedItems);
   };
 
+  // Helper to calculate totals from a list of items
+  const calculateOrderDetailsHelper = (items) => {
+    let totalLitres = 0;
+    let totalKg = 0;
+    let totalPackages = 0;
+    const packageBreakdown = {};
+
+    items.forEach(item => {
+      // Handle both raw product object (creation) and populated product (view)
+      let product = null;
+      if (item.product && item.product.packaging) {
+        product = item.product;
+      } else if (item.productId) {
+        product = products.find(p => p._id === item.productId);
+      }
+
+      const quantity = item.quantity || 0;
+
+      // Calculate Packages (Crates, Cartons, Bags, Boxes)
+      if (product && product.packaging && ['crate', 'carton', 'bag', 'box'].includes(product.packaging.type)) {
+        totalPackages += quantity;
+
+        // Track breakdown
+        const type = product.packaging.type; // crate, carton, etc
+        packageBreakdown[type] = (packageBreakdown[type] || 0) + quantity;
+      }
+
+      if (product?.packaging?.size?.value) {
+        let volume = parseFloat(product.packaging.size.value);
+        const unit = product.packaging.size.unit?.toLowerCase();
+        let multiplier = 1;
+
+        // Handle multipack case: Multiply by product.unit (items per pack)
+        if (['crate', 'carton', 'bag', 'box'].includes(product.packaging.type) && product.unit) {
+          const parsedUnit = parseFloat(product.unit);
+          if (!isNaN(parsedUnit)) {
+            multiplier = parsedUnit;
+          }
+        }
+
+        const totalSize = volume * multiplier * quantity;
+
+        if (unit === 'ml') {
+          totalLitres += totalSize / 1000;
+        } else if (unit === 'l' || unit === 'liter' || unit === 'liters') {
+          totalLitres += totalSize;
+        } else if (unit === 'g' || unit === 'gram' || unit === 'grams') {
+          totalKg += totalSize / 1000;
+        } else if (unit === 'kg' || unit === 'kilogram' || unit === 'kilograms') {
+          totalKg += totalSize;
+        }
+      }
+    });
+
+    return { totalLitres, totalKg, totalPackages, packageBreakdown };
+  };
+
   const calculateOrderTotals = () => {
     let subtotal = 0;
     let totalDiscount = 0;
@@ -532,6 +591,9 @@ const Orders = () => {
       grandTotal += (item.total || 0);
     });
 
+    // Use Helper for Units/Packages
+    const { totalLitres, totalKg, totalPackages, packageBreakdown } = calculateOrderDetailsHelper(orderItems);
+
     // Apply global discount
     let globalDiscountAmount = 0;
     if (globalDiscountType === 'percentage') {
@@ -540,17 +602,27 @@ const Orders = () => {
       globalDiscountAmount = globalDiscount || 0;
     }
 
-    // Apply custom adjustment (subtract from total)
+    // Apply custom adjustment (subtract or add based on operation)
     let adjustmentAmount = 0;
-    if (customAdjustment.amount && customAdjustment.text.trim()) {
+    const op = customAdjustment.operation || 'subtract';
+    const isAddition = op === 'add';
+
+    if (customAdjustment.amount && customAdjustment.text?.trim()) {
       if (customAdjustment.type === 'percentage') {
-        adjustmentAmount = (grandTotal * customAdjustment.amount) / 100;
+        adjustmentAmount = (grandTotal * Number(customAdjustment.amount)) / 100;
       } else {
-        adjustmentAmount = customAdjustment.amount || 0;
+        adjustmentAmount = Number(customAdjustment.amount) || 0;
       }
     }
 
-    const finalTotal = grandTotal - globalDiscountAmount - adjustmentAmount;
+    // Final total includes all discounts and adjustments
+    let finalTotal = grandTotal - globalDiscountAmount;
+
+    if (isAddition) {
+      finalTotal = finalTotal + adjustmentAmount;
+    } else {
+      finalTotal = finalTotal - adjustmentAmount;
+    }
 
     return {
       subtotal,
@@ -565,6 +637,10 @@ const Orders = () => {
       finalTotal,
       itemCount: orderItems.length,
       totalQuantity: orderItems.reduce((sum, item) => sum + (item.quantity || 0), 0),
+      totalLitres,
+      totalKg,
+      totalPackages,
+      packageBreakdown
     };
   };
 
@@ -578,7 +654,7 @@ const Orders = () => {
     setDealerPricing([]);
     setGlobalDiscount(0);
     setGlobalDiscountType('percentage');
-    setCustomAdjustment({ text: '', amount: 0, type: 'fixed' });
+    setCustomAdjustment({ text: '', amount: 0, type: 'fixed', operation: 'subtract' });
     form.resetFields();
   };
 
@@ -808,6 +884,7 @@ const Orders = () => {
         })),
 
         orderType, // Track whether this is a dealer or customer order
+        packageCount: totals.totalPackages, // Store package count
 
         pricing: {
           subtotal: totals.subtotal,
@@ -821,10 +898,16 @@ const Orders = () => {
         },
 
         payment: {
-          method: values.paymentMethod || 'cash', // Default payment method
-          status: 'pending',
-          paidAmount: 0,
-          dueAmount: totals.grandTotal,
+          method: values.paymentMethod || 'Not Paid',
+          status: (() => {
+            const existingPaid = editingOrder ? (editingOrder.payment?.paidAmount || 0) : 0;
+            const due = Math.max(0, totals.finalTotal - existingPaid);
+            if (due < 1) return 'completed';
+            if (existingPaid > 0) return 'partial';
+            return 'pending';
+          })(),
+          paidAmount: editingOrder ? (editingOrder.payment?.paidAmount || 0) : 0,
+          dueAmount: Math.max(0, totals.finalTotal - (editingOrder ? (editingOrder.payment?.paidAmount || 0) : 0)),
         },
 
         shipping: {
@@ -888,73 +971,46 @@ const Orders = () => {
     const invoiceContent = document.getElementById('invoice-content');
 
     if (printWindow && invoiceContent) {
+      // Write the basic HTML structure
       printWindow.document.write(`
         <!DOCTYPE html>
         <html>
         <head>
           <title>Invoice - ${viewingOrder?.orderNumber || 'N/A'}</title>
           <style>
-            body {
-              font-family: Arial, sans-serif;
-              margin: 0;
-              padding: 20px;
-              font-size: 12px;
-              line-height: 1.4;
-            }
-            table {
-              width: 100%;
-              border-collapse: collapse;
-              margin-bottom: 15px;
-            }
-            td, th {
-              border: 1px solid #333;
-              padding: 8px;
-              text-align: left;
-              vertical-align: top;
-            }
-            .header {
-              text-align: center;
-              margin-bottom: 20px;
-              padding: 15px;
-              border: 2px solid #333;
-            }
-            .company-logo {
-              width: 50px;
-              height: 50px;
-              margin-right: 15px;
-              border: 1px solid #333;
-              border-radius: 8px;
-              object-fit: cover;
-            }
-            .company-header {
-              display: flex;
-              align-items: center;
-              margin-bottom: 10px;
-            }
-            .footer {
-              margin-top: 30px;
-              text-align: center;
-              font-size: 10px;
-            }
-            @media print {
-              body { margin: 0; }
-              @page { margin: 0.5in; }
-            }
+             /* Add custom print overrides */
+             @media print {
+               @page { margin: 10mm; }
+               body { -webkit-print-color-adjust: exact; }
+             }
+             body {
+               background: white;
+               padding: 20px;
+             }
           </style>
         </head>
         <body>
-          ${invoiceContent.innerHTML}
+          <div id="invoice-content">${invoiceContent.innerHTML}</div>
         </body>
         </html>
       `);
 
-      printWindow.document.close();
-      printWindow.focus();
+      // Copy all stylesheets from parent
+      Array.from(document.querySelectorAll('style')).forEach(style => {
+        printWindow.document.head.appendChild(style.cloneNode(true));
+      });
+      Array.from(document.querySelectorAll('link[rel="stylesheet"]')).forEach(link => {
+        printWindow.document.head.appendChild(link.cloneNode(true));
+      });
 
+      printWindow.document.close();
+
+      // Wait for resources to load then print
       setTimeout(() => {
+        printWindow.focus();
         printWindow.print();
         printWindow.close();
-      }, 250);
+      }, 500);
     }
   };
 
@@ -1134,12 +1190,12 @@ const Orders = () => {
             </strong>
             {hasGlobalDiscount && (
               <div style={{ fontSize: '12px', color: '#ff7875' }}>
-                Global Discount: -{pricing.globalDiscountType === 'percentage' ? `${pricing.globalDiscount}%` : `₹${pricing.globalDiscount}`}
+                Via Discount: {pricing.globalDiscountType === 'percentage' ? `${pricing.globalDiscount}%` : `₹${pricing.globalDiscount}`}
               </div>
             )}
             {hasCustomAdjustment && (
-              <div style={{ fontSize: '12px', color: '#1890ff' }}>
-                {pricing.customAdjustment.text || 'Custom Adjustment'}: -₹{pricing.customAdjustment.amount}
+              <div style={{ fontSize: '12px', color: pricing.customAdjustment.operation === 'add' ? '#faad14' : '#1890ff' }}>
+                Via {pricing.customAdjustment.text || 'Adjustment'}: {pricing.customAdjustment.operation === 'add' ? '+' : '-'}₹{pricing.customAdjustment.amount}
               </div>
             )}
           </div>
@@ -1427,64 +1483,77 @@ const Orders = () => {
           onFinish={handleSubmitOrder}
         >
           {/* Order Type and Buyer Selection */}
-          <Row gutter={16} style={{ marginBottom: 16 }}>
-            <Col span={8}>
+          <Row gutter={16} style={{ marginBottom: 20 }}>
+            <Col span={6}>
               <div style={{ marginBottom: 8 }}>
-                <Text strong>Order Type</Text>
+                <Text type="secondary" style={{ fontSize: '13px' }}>ORDER TYPE</Text>
               </div>
               <Radio.Group
                 value={orderType}
                 onChange={(e) => handleOrderTypeChange(e.target.value)}
                 style={{ width: '100%' }}
+                buttonStyle="solid"
+                size="middle"
               >
                 <Radio.Button value="dealer" style={{ width: '50%', textAlign: 'center' }}>
                   <TeamOutlined /> Dealer
                 </Radio.Button>
                 <Radio.Button value="customer" style={{ width: '50%', textAlign: 'center' }}>
-                  <UserOutlined /> Customer
+                  <UserOutlined /> Consumer
                 </Radio.Button>
               </Radio.Group>
             </Col>
-            <Col span={10}>
+
+            <Col span={12}>
               <div style={{ marginBottom: 8 }}>
-                <Text strong>Select {orderType === 'dealer' ? 'Dealer' : 'Customer'}</Text>
+                <Text type="secondary" style={{ fontSize: '13px' }}>
+                  SELECT {orderType === 'dealer' ? 'DEALER' : 'CUSTOMER'}
+                </Text>
               </div>
               <Select
-                style={{ width: '100%' }}
-                placeholder={`Choose ${orderType}...`}
+                style={{ width: '100%', height: '32px' }}
+                placeholder={`Search & Select ${orderType === 'dealer' ? 'Dealer' : 'Customer'}...`}
                 showSearch
                 value={selectedBuyer}
                 onChange={handleBuyerChange}
                 optionFilterProp="children"
+                size="middle"
+                className="premium-select"
               >
                 {getBuyerOptions()}
               </Select>
             </Col>
 
-            {selectedBuyer && (
-              <Col span={6}>
-                <div style={{ marginBottom: 8 }}>
-                  <Text strong>Balance</Text>
-                </div>
-                <Tag
-                  color={buyerBalance > 0 ? 'red' : buyerBalance < 0 ? 'green' : 'default'}
-                  style={{
-                    padding: '4px 12px',
-                    fontSize: '14px',
-                    width: '100%',
-                    textAlign: 'center'
-                  }}
-                >
-                  ₹{Math.abs(buyerBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  {buyerBalance !== 0 && (buyerBalance > 0 ? ' DR' : ' CR')}
-                </Tag>
-              </Col>
-            )}
+            <Col span={6}>
+              {selectedBuyer ? (
+                <>
+                  <div style={{ marginBottom: 8 }}>
+                    <Text type="secondary" style={{ fontSize: '13px' }}>WALLET BALANCE</Text>
+                  </div>
+                  <div style={{
+                    padding: '6px 16px',
+                    borderRadius: '6px',
+                    backgroundColor: buyerBalance > 0 ? '#fff1f0' : buyerBalance < 0 ? '#f6ffed' : '#f5f5f5',
+                    border: `1px solid ${buyerBalance > 0 ? '#ffa39e' : buyerBalance < 0 ? '#b7eb8f' : '#d9d9d9'}`,
+                    textAlign: 'center',
+                    fontWeight: 600,
+                    color: buyerBalance > 0 ? '#cf1322' : buyerBalance < 0 ? '#389e0d' : 'rgba(0,0,0,0.65)'
+                  }}>
+                    ₹{Math.abs(buyerBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    <span style={{ fontSize: '12px', marginLeft: 4 }}>
+                      {buyerBalance !== 0 && (buyerBalance > 0 ? 'DR' : 'CR')}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div style={{ height: '58px' }}></div> // Spacer to prevent layout shift
+              )}
+            </Col>
           </Row>
 
           {/* Order Details, Payment & Shipping */}
           <Row gutter={16} style={{ marginBottom: 16 }}>
-            <Col span={6}>
+            <Col span={8}>
               <Form.Item
                 name="status"
                 label="Status"
@@ -1500,24 +1569,8 @@ const Orders = () => {
                 </Select>
               </Form.Item>
             </Col>
-            <Col span={6}>
-              <Form.Item
-                name="paymentMethod"
-                label="Payment"
-                rules={[{ required: true, message: 'Required' }]}
-                initialValue="cash"
-              >
-                <Select size="small">
-                  <Option value="cash">Cash</Option>
-                  <Option value="card">Card</Option>
-                  <Option value="bank-transfer">Bank Transfer</Option>
-                  <Option value="digital-wallet">Digital Wallet</Option>
-                  <Option value="credit">Credit</Option>
-                  <Option value="cheque">Cheque</Option>
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col span={6}>
+
+            <Col span={8}>
               <Form.Item
                 name="shippingMethod"
                 label="Shipping"
@@ -1533,7 +1586,8 @@ const Orders = () => {
                 </Select>
               </Form.Item>
             </Col>
-            <Col span={6}>
+
+            <Col span={8}>
               <Form.Item
                 name="deliveryDate"
                 label="Delivery Date"
@@ -1658,25 +1712,37 @@ const Orders = () => {
                 <Card
                   key={item.id || index}
                   size="small"
-                  style={{ marginBottom: 16 }}
+                  style={{
+                    marginBottom: 16,
+                    background: '#ffffff',
+                    borderRadius: '8px',
+                    border: '1px solid #f0f0f0',
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.02)'
+                  }}
+                  headStyle={{
+                    background: '#fafafa',
+                    borderBottom: '1px solid #f0f0f0',
+                    borderTopLeftRadius: '8px',
+                    borderTopRightRadius: '8px'
+                  }}
                   title={
                     <Space>
-                      <Text strong>Item {index + 1}</Text>
+                      <Text strong style={{ color: '#595959' }}>Item {index + 1}</Text>
                       {product && (
-                        <Tag color={pricing.hasCustomPricing ? 'blue' : 'green'}>
-                          {pricing.hasCustomPricing ? 'Dealer Price' : 'Base Price'}
+                        <Tag color={pricing.hasCustomPricing ? 'blue' : 'cyan'}>
+                          {pricing.hasCustomPricing ? 'Different Price' : 'Base Price'}
                         </Tag>
                       )}
                       {stockInfo && (
                         <Tag
-                          color={stockInfo.status === 'available' ? 'green' :
-                            stockInfo.status === 'insufficient' ? 'orange' : 'red'}
-                          style={{ fontSize: '11px' }}
+                          color={stockInfo.status === 'available' ? 'success' :
+                            stockInfo.status === 'insufficient' ? 'warning' : 'error'}
+                          style={{ fontSize: '11px', border: 'none' }}
                         >
                           {stockInfo.status === 'available'
                             ? `✓ ${stockInfo.available} in stock`
                             : stockInfo.status === 'insufficient'
-                              ? `⚠ Only ${stockInfo.available} available`
+                              ? `⚠ Only ${stockInfo.available} left`
                               : '✗ Out of stock'
                           }
                         </Tag>
@@ -1689,15 +1755,17 @@ const Orders = () => {
                       danger
                       icon={<MinusCircleOutlined />}
                       onClick={() => removeOrderItem(index)}
+                      style={{ opacity: 0.7 }}
                     >
                       Remove
                     </Button>
                   }
                 >
-                  <Row gutter={12}>
-                    <Col span={10}>
-                      <div style={{ marginBottom: 4 }}>
-                        <Text strong style={{ fontSize: '12px' }}>Product *</Text>
+                  <Row gutter={12} align="bottom">
+                    {/* Product - Span 8 */}
+                    <Col span={8}>
+                      <div style={{ marginBottom: 6 }}>
+                        <Text type="secondary" style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Product</Text>
                       </div>
                       <Select
                         style={{ width: '100%' }}
@@ -1706,7 +1774,7 @@ const Orders = () => {
                         onChange={(value) => updateOrderItem(index, 'productId', value)}
                         showSearch
                         optionFilterProp="children"
-                        size="small"
+                        size="large"
                       >
                         {products.map(product => {
                           const productPricing = getProductPrice(product._id);
@@ -1720,50 +1788,53 @@ const Orders = () => {
                       </Select>
                     </Col>
 
-                    <Col span={3}>
-                      <div style={{ marginBottom: 4 }}>
-                        <Text strong style={{ fontSize: '12px' }}>Qty</Text>
+                    {/* Quantity - Span 4 */}
+                    <Col span={4}>
+                      <div style={{ marginBottom: 6 }}>
+                        <Text type="secondary" style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Qty</Text>
                       </div>
                       <InputNumber
                         style={{ width: '100%' }}
                         min={1}
                         value={item.quantity}
                         onChange={(value) => updateOrderItem(index, 'quantity', value)}
-                        size="small"
+                        size="large"
                       />
                     </Col>
 
+                    {/* Price - Span 4 */}
                     <Col span={4}>
-                      <div style={{ marginBottom: 4 }}>
-                        <Text strong style={{ fontSize: '12px' }}>Price</Text>
+                      <div style={{ marginBottom: 6 }}>
+                        <Text type="secondary" style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Price</Text>
                       </div>
                       <InputNumber
-                        style={{ width: '100%' }}
                         value={item.unitPrice}
                         formatter={value => `₹${value}`}
                         disabled
-                        size="small"
+                        size="large"
+                        style={{ width: '100%', backgroundColor: '#fafafa', color: '#595959' }}
                       />
                     </Col>
 
+                    {/* Discount - Span 4 */}
                     <Col span={4}>
-                      <div style={{ marginBottom: 4 }}>
-                        <Text strong style={{ fontSize: '12px' }}>Discount</Text>
+                      <div style={{ marginBottom: 6 }}>
+                        <Text type="secondary" style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Discount</Text>
                       </div>
                       <Space.Compact style={{ width: '100%' }}>
                         <InputNumber
-                          style={{ width: '70%' }}
+                          style={{ width: '65%' }}
                           min={0}
                           max={item.discountType === 'percentage' ? 50 : 10000}
                           value={item.discount}
                           onChange={(value) => updateOrderItem(index, 'discount', value)}
-                          size="small"
+                          size="large"
                         />
                         <Select
-                          style={{ width: '30%' }}
+                          style={{ width: '35%' }}
                           value={item.discountType}
                           onChange={(value) => updateOrderItem(index, 'discountType', value)}
-                          size="small"
+                          size="large"
                         >
                           <Option value="percentage">%</Option>
                           <Option value="fixed">₹</Option>
@@ -1771,20 +1842,22 @@ const Orders = () => {
                       </Space.Compact>
                     </Col>
 
-                    <Col span={3}>
-                      <div style={{ marginBottom: 4 }}>
-                        <Text strong style={{ fontSize: '12px' }}>Total</Text>
+                    {/* Total - Span 4 */}
+                    <Col span={4}>
+                      <div style={{ marginBottom: 6 }}>
+                        <Text type="secondary" style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total</Text>
                       </div>
                       <div style={{
-                        padding: '1px 4px',
-                        backgroundColor: '#f0f2f5',
-                        borderRadius: '2px',
-                        textAlign: 'center',
-                        fontSize: '13px',
-                        height: '24px',
-                        lineHeight: '22px'
+                        padding: '0 12px',
+                        backgroundColor: '#f6ffed',
+                        border: '1px solid #b7eb8f',
+                        borderRadius: '6px',
+                        textAlign: 'right',
+                        height: '40px',
+                        lineHeight: '38px',
+                        width: '100%'
                       }}>
-                        <Text strong style={{ color: '#52c41a' }}>
+                        <Text strong style={{ color: '#389e0d', fontSize: '15px' }}>
                           ₹{(item.total || 0).toFixed(2)}
                         </Text>
                       </div>
@@ -2024,14 +2097,27 @@ const Orders = () => {
                         }}
                         size="small"
                       >
-                        <Option value="percentage">%</Option>
-                        <Option value="fixed">₹</Option>
+                        <Select.Option value="fixed">₹</Select.Option>
+                        <Select.Option value="percentage">%</Select.Option>
                       </Select>
                     </Space.Compact>
                   </Col>
                   <Col span={6}>
-                    <Text type="danger">
-                      -₹{orderTotals.adjustmentAmount.toFixed(2)}
+                    <Select
+                      style={{ width: '100%' }}
+                      value={customAdjustment.operation || 'subtract'}
+                      onChange={(value) => {
+                        setCustomAdjustment({ ...customAdjustment, operation: value });
+                      }}
+                      size="small"
+                    >
+                      <Select.Option value="subtract">Deduct (-)</Select.Option>
+                      <Select.Option value="add">Add Charge (+)</Select.Option>
+                    </Select>
+                  </Col>
+                  <Col span={6}>
+                    <Text type={customAdjustment.operation === 'add' ? 'warning' : 'danger'}>
+                      {customAdjustment.operation === 'add' ? '+' : '-'}₹{orderTotals.adjustmentAmount.toFixed(2)}
                     </Text>
                   </Col>
                   <Col span={6}>
@@ -2059,6 +2145,41 @@ const Orders = () => {
                   <Text style={{ fontSize: '12px' }}>Total Tax: ₹{orderTotals.totalTax.toFixed(2)}</Text>
                 </Col>
               </Row>
+
+              {/* Unit Totals */}
+              {(orderTotals.totalLitres > 0 || orderTotals.totalKg > 0) && (
+                <Row gutter={16} style={{ marginBottom: 12 }}>
+                  {orderTotals.totalLitres > 0 && (
+                    <Col span={6}>
+                      <Text strong style={{ fontSize: '12px' }}>Total Litres: {orderTotals.totalLitres.toFixed(2)} L</Text>
+                    </Col>
+                  )}
+                  {orderTotals.totalKg > 0 && (
+                    <Col span={6}>
+                      <Text strong style={{ fontSize: '12px' }}>Total Kg: {orderTotals.totalKg.toFixed(2)} Kg</Text>
+                    </Col>
+                  )}
+                </Row>
+              )}
+
+              {/* Dynamic Package Breakdown - Below Total Litres */}
+              {Object.entries(orderTotals.packageBreakdown || {}).map(([type, count]) => (
+                <Row key={type} gutter={16} style={{ marginBottom: 12 }}>
+                  <Col span={12}>
+                    <Text strong style={{ fontSize: '13px', textTransform: 'capitalize' }}>
+                      Total {type}s:
+                    </Text>
+                  </Col>
+                  <Col span={12}>
+                    <Input
+                      value={count}
+                      readOnly
+                      size="small"
+                      style={{ fontWeight: 'bold', color: '#1890ff', textAlign: 'right' }}
+                    />
+                  </Col>
+                </Row>
+              ))}
 
               <Divider />
 
@@ -2199,9 +2320,25 @@ const Orders = () => {
                             SKU: {sku}
                           </div>
                         )}
+                        {record.product?.taxMethod === 'inclusive' && (
+                          <Tag color="purple" style={{ fontSize: '10px', marginTop: 2 }}>Inc. Tax</Tag>
+                        )}
                       </div>
                     );
                   },
+                },
+                {
+                  title: 'Packaging',
+                  key: 'packaging',
+                  render: (_, record) => {
+                    const packaging = record.product?.packaging;
+                    if (!packaging?.size?.value) return '-';
+                    return (
+                      <Tag color="blue">
+                        {packaging.size.value} {packaging.size.unit} ({packaging.type})
+                      </Tag>
+                    );
+                  }
                 },
                 {
                   title: 'Quantity',
@@ -2236,6 +2373,144 @@ const Orders = () => {
               bordered
             />
 
+            <Divider orientation="left">GST Breakdown</Divider>
+            <Table
+              dataSource={viewingOrder.items.map((item, idx) => {
+                const product = item.product || {};
+                const isInclusive = product.taxMethod === 'inclusive';
+
+                // Rates
+                const igstRate = item.igst || 0;
+                const cgstRate = item.cgst || 0;
+                const sgstRate = item.sgst || 0;
+                const totalRate = igstRate + cgstRate + sgstRate;
+
+                // Amounts
+                const quantity = item.quantity || 0;
+                const unitPrice = item.unitPrice || 0;
+                const grossTotal = quantity * unitPrice;
+
+                // Calculate Taxable Value
+                let taxableValue = 0;
+                if (isInclusive) {
+                  // If Inc: Taxable = Gross / (1 + Rate/100)
+                  taxableValue = grossTotal / (1 + (totalRate / 100));
+                } else {
+                  // If Exc: Taxable = Gross (approx, minus discount if applicable logically, but here utilizing gross basis)
+                  // Wait: Backend logic `item.totalPrice` = (Qty*Price)-Disc. 
+                  // Let's rely on item.totalPrice as base if exclusive? 
+                  // No, usually GST is on Post-Discount value.
+                  // Let's use item.totalPrice (which is after discount).
+                  // BUT item.totalPrice logic in backend DOES NOT mention tax inclusion/exclusion removal.
+                  // Assuming item.totalPrice is the FINAL price for line item.
+
+                  // Let's re-calculate cleanly:
+                  const totalAfterDiscount = ((item.unitPrice || 0) * (item.quantity || 0)) - (item.discount || 0); // Discount logic varies (percentage/fixed), but item.discount is usually the AMOUNT in schema? No, look at `updateOrderItem`.
+                  // Actually, let's simplify and use the stored taxAmount if available as a check?
+                  // Let's recalculate based on standard inclusive/exclusive formulas for display accuracy.
+
+                  const itemTotal = (item.unitPrice || 0) * (item.quantity || 0); // Raw total
+                  // Note: Discount handling is tricky without seeing full logic, but let's assume Taxable Value is Pre-Tax.
+
+                  // Simple Logic for View: 
+                  // Case 1: Exclusive. Taxable = UnitPrice * Qty. Tax = Taxable * Rate.
+                  // Case 2: Inclusive. Taxable = (UnitPrice * Qty) / (1+Rate).
+                }
+
+                // Better Approach: Use the stored `taxAmount` to derive Taxable if possible, or recalculate.
+                // Let's implement Recalculation based on available fields to ensure consistency.
+
+                const baseAmount = ((item.unitPrice || 0) * (item.quantity || 0));
+
+                // If item has discount, we should subtract it first? Usually yes.
+                // item.discount IS the amount? 
+                let discountAmt = 0;
+                if (item.discountType === 'percentage') {
+                  discountAmt = (baseAmount * (item.discount || 0)) / 100;
+                } else {
+                  discountAmt = item.discount || 0;
+                }
+
+                const amountAfterDiscount = baseAmount - discountAmt;
+
+                if (isInclusive) {
+                  taxableValue = amountAfterDiscount / (1 + (totalRate / 100));
+                } else {
+                  taxableValue = amountAfterDiscount;
+                }
+
+                return {
+                  key: idx,
+                  productName: product.name || 'Unknown',
+                  hsn: product.hsnCode || '-',
+                  taxableValue: taxableValue,
+                  igstRate: igstRate,
+                  igstAmount: igstRate > 0 ? (taxableValue * igstRate / 100) : 0,
+                  cgstRate: cgstRate,
+                  cgstAmount: cgstRate > 0 ? (taxableValue * cgstRate / 100) : 0,
+                  sgstRate: sgstRate,
+                  sgstAmount: sgstRate > 0 ? (taxableValue * sgstRate / 100) : 0,
+                };
+              })}
+              pagination={false}
+              size="small"
+              bordered
+              columns={[
+                { title: 'Product', dataIndex: 'productName', key: 'productName' },
+                { title: 'HSN/SAC', dataIndex: 'hsn', key: 'hsn' },
+                {
+                  title: 'Taxable Value',
+                  dataIndex: 'taxableValue',
+                  key: 'taxableValue',
+                  align: 'right',
+                  render: (val) => `₹${val.toFixed(2)}`
+                },
+                {
+                  title: 'CGST',
+                  children: [
+                    { title: 'Rate', dataIndex: 'cgstRate', key: 'cgstRate', render: r => `${r}%`, align: 'right' },
+                    { title: 'Amt', dataIndex: 'cgstAmount', key: 'cgstAmount', render: v => `₹${v.toFixed(2)}`, align: 'right' }
+                  ]
+                },
+                {
+                  title: 'SGST',
+                  children: [
+                    { title: 'Rate', dataIndex: 'sgstRate', key: 'sgstRate', render: r => `${r}%`, align: 'right' },
+                    { title: 'Amt', dataIndex: 'sgstAmount', key: 'sgstAmount', render: v => `₹${v.toFixed(2)}`, align: 'right' }
+                  ]
+                },
+                {
+                  title: 'IGST',
+                  children: [
+                    { title: 'Rate', dataIndex: 'igstRate', key: 'igstRate', render: r => `${r}%`, align: 'right' },
+                    { title: 'Amt', dataIndex: 'igstAmount', key: 'igstAmount', render: v => `₹${v.toFixed(2)}`, align: 'right' }
+                  ]
+                },
+                {
+                  title: 'Total Tax',
+                  key: 'totalTax',
+                  align: 'right',
+                  render: (_, r) => <Text strong>₹{(r.cgstAmount + r.sgstAmount + r.igstAmount).toFixed(2)}</Text>
+                }
+              ]}
+              summary={pageData => {
+                let totalTaxable = 0;
+                let totalTax = 0;
+                pageData.forEach(({ taxableValue, cgstAmount, sgstAmount, igstAmount }) => {
+                  totalTaxable += taxableValue;
+                  totalTax += (cgstAmount + sgstAmount + igstAmount);
+                });
+                return (
+                  <Table.Summary.Row style={{ backgroundColor: '#fafafa', fontWeight: 'bold' }}>
+                    <Table.Summary.Cell index={0} colSpan={2}>Total</Table.Summary.Cell>
+                    <Table.Summary.Cell index={1} align="right">₹{totalTaxable.toFixed(2)}</Table.Summary.Cell>
+                    <Table.Summary.Cell index={2} colSpan={6}></Table.Summary.Cell>
+                    <Table.Summary.Cell index={3} align="right">₹{totalTax.toFixed(2)}</Table.Summary.Cell>
+                  </Table.Summary.Row>
+                );
+              }}
+            />
+
             <Row justify="end" style={{ marginTop: 16 }}>
               <Col span={12}>
                 <Descriptions
@@ -2248,16 +2523,67 @@ const Orders = () => {
                   <Descriptions.Item label="Subtotal">
                     ₹{(viewingOrder.pricing?.subtotal || 0).toFixed(2)}
                   </Descriptions.Item>
-                  <Descriptions.Item label="Discount">
-                    ₹{(viewingOrder.pricing?.discount || 0).toFixed(2)}
-                  </Descriptions.Item>
+                  {viewingOrder.pricing?.globalDiscount > 0 && (
+                    <Descriptions.Item label={`Global Discount (${viewingOrder.pricing.globalDiscountType === 'percentage' ? viewingOrder.pricing.globalDiscount + '%' : 'Fixed'})`}>
+                      <Text type="danger">
+                        -₹{viewingOrder.pricing.globalDiscountType === 'percentage'
+                          ? (((viewingOrder.pricing.subtotal + viewingOrder.pricing.tax) * viewingOrder.pricing.globalDiscount) / 100).toFixed(2)
+                          : (viewingOrder.pricing.globalDiscount || 0).toFixed(2)}
+                      </Text>
+                    </Descriptions.Item>
+                  )}
                   <Descriptions.Item label="Tax">
                     ₹{(viewingOrder.pricing?.tax || 0).toFixed(2)}
                   </Descriptions.Item>
-                  <Descriptions.Item label="Grand Total">
-                    <strong style={{ fontSize: '16px' }}>₹{(viewingOrder.pricing?.total || 0).toFixed(2)}</strong>
+                  {viewingOrder.pricing?.customAdjustment && Number(viewingOrder.pricing.customAdjustment.amount) !== 0 && (
+                    <Descriptions.Item label={viewingOrder.pricing.customAdjustment.name || viewingOrder.pricing.customAdjustment.text || "Adjustment"}>
+                      <Text type={viewingOrder.pricing.customAdjustment.operation === 'add' ? 'warning' : 'success'}>
+                        {viewingOrder.pricing.customAdjustment.operation === 'add' ? '+' : '-'}₹{Number(viewingOrder.pricing.customAdjustment.amount).toFixed(2)}
+                      </Text>
+                    </Descriptions.Item>
+                  )}
+                  <Descriptions.Item label="Total Amount">
+                    <Text strong style={{ fontSize: '18px', color: '#52c41a' }}>
+                      ₹{(viewingOrder.pricing?.total || 0).toFixed(2)}
+                    </Text>
                   </Descriptions.Item>
                 </Descriptions>
+
+                {/* Calculated Package & Unit Totals for View Modal */}
+                {(() => {
+                  // Calculate totals dynamically from viewingOrder.items
+                  const { totalLitres, totalKg, packageBreakdown } = calculateOrderDetailsHelper(viewingOrder.items || []);
+
+                  return (
+                    <div style={{ marginTop: 24, padding: 16, background: '#f9f9f9', borderRadius: 8 }}>
+                      <Text strong style={{ display: 'block', marginBottom: 12 }}>Package Summary:</Text>
+                      <Row gutter={16}>
+                        {totalLitres > 0 && (
+                          <Col span={6}>
+                            <Statistic title="Total Litres" value={totalLitres} precision={2} suffix="L" valueStyle={{ fontSize: 16 }} />
+                          </Col>
+                        )}
+                        {totalKg > 0 && (
+                          <Col span={6}>
+                            <Statistic title="Total Kg" value={totalKg} precision={2} suffix="Kg" valueStyle={{ fontSize: 16 }} />
+                          </Col>
+                        )}
+
+                        {/* Dynamic Package Breakdown */}
+                        {Object.entries(packageBreakdown || {}).map(([type, count]) => (
+                          <Col span={6} key={type}>
+                            <Statistic
+                              title={`Total ${type.charAt(0).toUpperCase() + type.slice(1)}s`}
+                              value={count}
+                              valueStyle={{ fontSize: 16, color: '#1890ff' }}
+                            />
+                          </Col>
+                        ))}
+                      </Row>
+                    </div>
+                  );
+                })()}
+
               </Col>
             </Row>
 
@@ -2285,25 +2611,35 @@ const Orders = () => {
               </>
             )}
           </div>
-        )}
-      </Modal>
+        )
+        }
+      </Modal >
 
       {/* Invoice Modal */}
-      <Modal
+      < Modal
         title={
-          <Space>
+          < Space >
             <FileTextOutlined />
             Invoice
-            <Button
+            < Button
               type="primary"
-              icon={<PrinterOutlined />}
+              icon={< PrinterOutlined />}
               onClick={handlePrintInvoice}
               size="small"
               className="no-print"
             >
               Print
+            </Button >
+            <Button
+              type="default"
+              icon={<DownloadOutlined />}
+              onClick={handlePrintInvoice}
+              size="small"
+              className="no-print"
+            >
+              Download
             </Button>
-          </Space>
+          </Space >
         }
         open={invoiceModalVisible}
         onCancel={() => setInvoiceModalVisible(false)}
@@ -2403,896 +2739,236 @@ const Orders = () => {
                 }
               }
             `}</style>
-            <div id="invoice-content" style={{ padding: '20px', backgroundColor: '#fff', fontFamily: 'Arial, sans-serif' }}>
-              {/* Corporate Light Invoice Header */}
-              <div style={{
-                textAlign: 'center',
-                marginBottom: '20px',
-                background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
-                color: '#1e293b',
-                padding: '20px',
-                border: '2px solid #cbd5e1',
-                borderRadius: '8px',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
-              }}>
-                <Title level={2} style={{
-                  margin: 0,
-                  fontWeight: 'bold',
-                  textTransform: 'uppercase',
-                  color: '#334155',
-                  letterSpacing: '1px'
-                }}>
-                  TAX INVOICE
-                </Title>
-                <div style={{ fontSize: '12px', marginTop: '8px', color: '#64748b', fontWeight: '500' }}>
-                  Professional Invoice Management System
-                </div>
+            <div id="invoice-content" style={{ padding: '20px', backgroundColor: '#fff' }}>
+
+              <div style={{ textAlign: 'center', marginBottom: 20 }}>
+                <Title level={3} style={{ margin: 0 }}>TAX INVOICE</Title>
               </div>
 
-              {/* Corporate Light Company and Party Details */}
-              <table style={{
-                width: '100%',
-                border: '1px solid #cbd5e1',
-                borderCollapse: 'collapse',
-                marginBottom: '15px',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
-              }}>
-                <tbody>
-                  {/* Company Details Row */}
-                  <tr>
-                    <td style={{
-                      width: '50%',
-                      border: '1px solid #e2e8f0',
-                      padding: '15px',
-                      verticalAlign: 'top',
-                      borderRight: '1px solid #cbd5e1',
-                      backgroundColor: '#f8fafc'
-                    }}>
-                      <div style={{
-                        fontWeight: '700',
-                        fontSize: '15px',
-                        marginBottom: '10px',
-                        color: '#1e293b',
-                        borderBottom: '1px solid #cbd5e1',
-                        paddingBottom: '6px'
-                      }}>
-                        {/* Company Logo and Name */}
-                        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
-                          {company?.settings?.theme?.logo && (
-                            <img
-                              src={company.settings.theme.logo}
-                              alt="Company Logo"
-                              style={{
-                                width: '50px',
-                                height: '50px',
-                                marginRight: '15px',
-                                border: '1px solid #e2e8f0',
-                                borderRadius: '8px',
-                                objectFit: 'cover'
-                              }}
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                              }}
-                            />
-                          )}
-                          <div>
-                            {company?.name?.toUpperCase() || 'COMPANY NAME'}
-                          </div>
-                        </div>
-                      </div>
-                      <div style={{ fontSize: '12px', lineHeight: '1.6', color: '#475569' }}>
-                        Address: {company?.contactInfo?.address?.street || 'Address'}, {company?.contactInfo?.address?.city || 'City'}<br />
-                        State: {company?.contactInfo?.address?.state || 'State'}, PIN: {company?.contactInfo?.address?.postalCode || 'PIN'}<br />
-                        Phone: {company?.contactInfo?.phone || 'Phone Number'}<br />
-                        Email: {company?.contactInfo?.email || 'Email Address'}<br />
-                        {company?.businessInfo?.gstNumber && (
-                          <>GSTIN: <span style={{ fontWeight: '600', color: '#334155' }}>{company.businessInfo.gstNumber}</span><br /></>
-                        )}
-                        {company?.businessInfo?.website && (
-                          <>Website: <span style={{ fontWeight: '600', color: '#334155' }}>{company.businessInfo.website}</span><br /></>
-                        )}
-                      </div>
-                    </td>
-                    <td style={{
-                      width: '50%',
-                      border: '1px solid #e2e8f0',
-                      padding: '15px',
-                      verticalAlign: 'top',
-                      backgroundColor: '#f1f5f9'
-                    }}>
-                      <div style={{
-                        fontWeight: '700',
-                        fontSize: '14px',
-                        marginBottom: '10px',
-                        color: '#1e293b',
-                        borderBottom: '1px solid #cbd5e1',
-                        paddingBottom: '6px'
-                      }}>
-                        Invoice Details
-                      </div>
-                      <div style={{ fontSize: '12px', lineHeight: '1.6', color: '#475569' }}>
-                        Invoice No: <span style={{ fontWeight: '600', color: '#334155' }}>{viewingOrder?.orderNumber || 'N/A'}</span><br />
-                        Invoice Date: <span style={{ fontWeight: '600', color: '#334155' }}>{viewingOrder?.createdAt ? dayjs(viewingOrder.createdAt).format('DD/MM/YYYY') : 'N/A'}</span><br />
-                        Due Date: <span style={{ fontWeight: '600', color: '#334155' }}>{viewingOrder?.deliveryDate ? dayjs(viewingOrder.deliveryDate).format('DD/MM/YYYY') : 'N/A'}</span><br />
-                        Place of Supply: <span style={{ fontWeight: '600', color: '#334155' }}>{company?.contactInfo?.address?.state || 'State'}</span><br />
-                        Payment Terms: <span style={{ fontWeight: '600', color: '#334155' }}>{viewingOrder?.payment?.method || 'Cash'}</span><br />
-                        Status: <span style={{
-                          padding: '4px 10px',
-                          backgroundColor: (() => {
-                            const status = viewingOrder?.status;
-                            switch (status) {
-                              case 'completed': return '#f0f9ff';
-                              case 'pending': return '#fef3c7';
-                              case 'processing': return '#eff6ff';
-                              case 'shipped': return '#f0fdf4';
-                              case 'cancelled': return '#fef2f2';
-                              default: return '#f8fafc';
-                            }
-                          })(),
-                          color: (() => {
-                            const status = viewingOrder?.status;
-                            switch (status) {
-                              case 'completed': return '#0284c7';
-                              case 'pending': return '#d97706';
-                              case 'processing': return '#3b82f6';
-                              case 'shipped': return '#10b981';
-                              case 'cancelled': return '#dc2626';
-                              default: return '#64748b';
-                            }
-                          })(),
-                          border: `1px solid ${(() => {
-                            const status = viewingOrder?.status;
-                            switch (status) {
-                              case 'completed': return '#0284c7';
-                              case 'pending': return '#d97706';
-                              case 'processing': return '#3b82f6';
-                              case 'shipped': return '#10b981';
-                              case 'cancelled': return '#dc2626';
-                              default: return '#cbd5e1';
-                            }
-                          })()}`,
-                          borderRadius: '6px',
-                          fontSize: '10px',
-                          textTransform: 'uppercase',
-                          fontWeight: '600',
-                          letterSpacing: '0.5px'
-                        }}>{viewingOrder?.status || 'Unknown'}</span>
-                      </div>
-                    </td>
-                  </tr>
+              <Descriptions bordered size="small" column={2}>
+                <Descriptions.Item label="Order Number">
+                  {viewingOrder.orderNumber}
+                </Descriptions.Item>
+                <Descriptions.Item label="Date">
+                  {dayjs(viewingOrder.createdAt).format('MMM DD, YYYY')}
+                </Descriptions.Item>
+                {viewingOrder.dealer && (
+                  <>
+                    <Descriptions.Item label="Dealer">
+                      {viewingOrder.dealer.name}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Group">
+                      {viewingOrder.dealer.dealerGroup?.name}
+                    </Descriptions.Item>
+                  </>
+                )}
+                {viewingOrder.customer && (
+                  <>
+                    <Descriptions.Item label="Customer">
+                      {viewingOrder.customer.name}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Email">
+                      {viewingOrder.customer.email}
+                    </Descriptions.Item>
+                  </>
+                )}
+                <Descriptions.Item label="Status">
+                  {viewingOrder.status?.toUpperCase()}
+                </Descriptions.Item>
+              </Descriptions>
 
-                  {/* Party Details Row */}
-                  <tr>
-                    <td colSpan={2} style={{
-                      border: '1px solid #e2e8f0',
-                      padding: '15px',
-                      borderTop: '1px solid #cbd5e1',
-                      backgroundColor: '#fefefe'
-                    }}>
-                      <div style={{
-                        fontWeight: '700',
-                        fontSize: '14px',
-                        marginBottom: '10px',
-                        color: '#1e293b',
-                        borderBottom: '1px solid #cbd5e1',
-                        paddingBottom: '6px'
-                      }}>
-                        👤 BILL TO PARTY:
-                      </div>
-                      {viewingOrder?.dealer ? (
-                        <div style={{ fontSize: '12px', lineHeight: '1.6', color: '#475569' }}>
-                          <strong style={{ color: '#1e293b', fontSize: '14px', fontWeight: '600' }}>
-                            {viewingOrder.dealer.name || 'N/A'}
-                          </strong>
-                          {viewingOrder.dealer.businessName && (
-                            <span style={{ color: '#64748b', fontWeight: '500' }}> ({viewingOrder.dealer.businessName})</span>
-                          )}<br />
-                          {viewingOrder.dealer.address && (
-                            <>
-                              📍 {[
-                                viewingOrder.dealer.address.street,
-                                viewingOrder.dealer.address.city,
-                                viewingOrder.dealer.address.state && `${viewingOrder.dealer.address.state} - ${viewingOrder.dealer.address.postalCode || ''}`
-                              ].filter(Boolean).join(', ')}<br />
-                            </>
-                          )}
-                          {(viewingOrder.dealer.contactInfo?.primaryPhone || viewingOrder.dealer.contactInfo?.email) && (
-                            <>
-                              📞 {viewingOrder.dealer.contactInfo?.primaryPhone || 'N/A'}
-                              {viewingOrder.dealer.contactInfo?.email && ` | 📧 ${viewingOrder.dealer.contactInfo.email}`}<br />
-                            </>
-                          )}
-                          🆔 GSTIN: <span style={{ fontWeight: '600', color: '#334155' }}>{viewingOrder.dealer.gstNumber || 'N/A'}</span>
-                          {viewingOrder.dealer.dealerCode && (
-                            <span style={{ color: '#64748b', fontWeight: '500' }}> | 🏷️ Dealer Code: {viewingOrder.dealer.dealerCode}</span>
-                          )}
-                        </div>
-                      ) : viewingOrder?.customer ? (
-                        <div style={{ fontSize: '12px', lineHeight: '1.6', color: '#475569' }}>
-                          <strong style={{ color: '#1e293b', fontSize: '14px', fontWeight: '600' }}>
-                            {viewingOrder.customer.name || 'N/A'}
-                          </strong><br />
-                          {viewingOrder.customer.address && (
-                            <>Address: {viewingOrder.customer.address}<br /></>
-                          )}
-                          {viewingOrder.customer.phone && (
-                            <>Phone: {viewingOrder.customer.phone}</>
-                          )}
-                          {viewingOrder.customer.email && (
-                            <> | Email: {viewingOrder.customer.email}</>
-                          )}
-                        </div>
-                      ) : (
-                        <div style={{ fontSize: '12px', color: '#ef4444', fontStyle: 'italic', fontWeight: '500' }}>
-                          No party information available
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+              <Divider />
 
-              {/* Corporate Light Items Table */}
-              <table style={{
-                width: '100%',
-                border: '1px solid #cbd5e1',
-                borderCollapse: 'collapse',
-                marginBottom: '15px',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
-              }}>
-                <thead>
-                  <tr style={{
-                    backgroundColor: '#f1f5f9',
-                    borderBottom: '2px solid #cbd5e1'
-                  }}>
-                    <th style={{
-                      border: '1px solid #e2e8f0',
-                      padding: '12px',
-                      fontSize: '12px',
-                      fontWeight: '700',
-                      textAlign: 'center',
-                      width: '50px',
-                      color: '#334155'
-                    }}>
-                      S.No
-                    </th>
-                    <th style={{
-                      border: '1px solid #e2e8f0',
-                      padding: '12px',
-                      fontSize: '12px',
-                      fontWeight: '700',
-                      textAlign: 'left',
-                      color: '#334155'
-                    }}>
-                      Particulars
-                    </th>
-                    <th style={{
-                      border: '1px solid #e2e8f0',
-                      padding: '12px',
-                      fontSize: '12px',
-                      fontWeight: '700',
-                      textAlign: 'center',
-                      width: '70px',
-                      color: '#334155'
-                    }}>
-                      Qty
-                    </th>
-                    <th style={{
-                      border: '1px solid #e2e8f0',
-                      padding: '12px',
-                      fontSize: '12px',
-                      fontWeight: '700',
-                      textAlign: 'center',
-                      width: '90px',
-                      color: '#334155'
-                    }}>
-                      Rate
-                    </th>
-                    <th style={{
-                      border: '1px solid #e2e8f0',
-                      padding: '12px',
-                      fontSize: '12px',
-                      fontWeight: '700',
-                      textAlign: 'center',
-                      width: '90px',
-                      color: '#334155'
-                    }}>
-                      🎯 Disc.
-                    </th>
-                    <th style={{
-                      border: '1px solid #e2e8f0',
-                      padding: '12px',
-                      fontSize: '12px',
-                      fontWeight: '700',
-                      textAlign: 'center',
-                      width: '70px',
-                      color: '#334155'
-                    }}>
-                      Tax%
-                    </th>
-                    <th style={{
-                      border: '1px solid #e2e8f0',
-                      padding: '12px',
-                      fontSize: '12px',
-                      fontWeight: '700',
-                      textAlign: 'center',
-                      width: '100px',
-                      color: '#334155'
-                    }}>
-                      💵 Amount
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {viewingOrder?.items?.length > 0 ? viewingOrder.items.map((item, index) => {
-                    const subtotal = (item?.unitPrice || 0) * (item?.quantity || 0);
-                    const discountAmount = item?.discountType === 'percentage'
-                      ? (subtotal * (item?.discount || 0)) / 100
-                      : (item?.discount || 0);
-                    const afterDiscount = subtotal - discountAmount;
-                    const taxRate = (item?.igst || 0) + (item?.cgst || 0) + (item?.sgst || 0);
+              {/* Items Table */}
+              <Table
+                dataSource={viewingOrder.items}
+                pagination={false}
+                size="small"
+                bordered
+                columns={[
+                  {
+                    title: 'Product',
+                    key: 'product',
+                    render: (_, record) => {
+                      const productName = record.productName ||
+                        record.product?.name ||
+                        record.productId?.name ||
+                        'Unknown Product';
+                      const sku = record.product?.sku || record.sku;
 
-                    return (
-                      <tr key={item?._id || `item-${index}`} style={{
-                        backgroundColor: index % 2 === 0 ? '#fefefe' : '#ffffff'
-                      }}>
-                        <td style={{
-                          border: '1px solid #e2e8f0',
-                          padding: '10px',
-                          fontSize: '11px',
-                          textAlign: 'center',
-                          fontWeight: '600',
-                          color: '#64748b'
-                        }}>
-                          {index + 1}
-                        </td>
-                        <td style={{
-                          border: '1px solid #e2e8f0',
-                          padding: '10px',
-                          fontSize: '11px',
-                          color: '#1e293b'
-                        }}>
-                          <div style={{ fontWeight: '600', color: '#334155' }}>
-                            {item?.productName || item?.product?.name || '❓ Unknown Product'}
-                          </div>
-                          {item?.product?.description && (
-                            <div style={{
-                              fontSize: '10px',
-                              color: '#64748b',
-                              marginTop: '3px',
-                              fontStyle: 'italic'
-                            }}>
-                              {item.product.description}
+                      return (
+                        <div>
+                          <div style={{ fontWeight: 500 }}>{productName}</div>
+                          {sku && (
+                            <div style={{ fontSize: '12px', color: '#666' }}>
+                              SKU: {sku}
                             </div>
                           )}
-                        </td>
-                        <td style={{
-                          border: '1px solid #e2e8f0',
-                          padding: '10px',
-                          fontSize: '11px',
-                          textAlign: 'center',
-                          fontWeight: '600',
-                          color: '#475569'
-                        }}>
-                          {item?.quantity || 0}
-                        </td>
-                        <td style={{
-                          border: '1px solid #e2e8f0',
-                          padding: '10px',
-                          fontSize: '11px',
-                          textAlign: 'right',
-                          fontWeight: '600',
-                          color: '#475569'
-                        }}>
-                          ₹{(item?.unitPrice || 0).toFixed(2)}
-                        </td>
-                        <td style={{
-                          border: '1px solid #e2e8f0',
-                          padding: '10px',
-                          fontSize: '11px',
-                          textAlign: 'right',
-                          color: '#dc2626',
-                          fontWeight: '600'
-                        }}>
-                          ₹{discountAmount.toFixed(2)}
-                        </td>
-                        <td style={{
-                          border: '1px solid #e2e8f0',
-                          padding: '10px',
-                          fontSize: '11px',
-                          textAlign: 'center',
-                          fontWeight: '600',
-                          color: '#475569'
-                        }}>
-                          {taxRate.toFixed(1)}%
-                        </td>
-                        <td style={{
-                          border: '1px solid #e2e8f0',
-                          padding: '10px',
-                          fontSize: '12px',
-                          textAlign: 'right',
-                          fontWeight: '700',
-                          color: '#1e293b',
-                          backgroundColor: '#f8fafc'
-                        }}>
-                          ₹{(item?.totalPrice || 0).toFixed(2)}
-                        </td>
-                      </tr>
+                          {record.product?.taxMethod === 'inclusive' && (
+                            <Tag color="purple" style={{ fontSize: '10px', marginTop: 2 }}>Inc. Tax</Tag>
+                          )}
+                        </div>
+                      );
+                    },
+                  },
+                  {
+                    title: 'Packaging',
+                    key: 'packaging',
+                    render: (_, record) => {
+                      const packaging = record.product?.packaging;
+                      if (!packaging?.size?.value) return '-';
+                      return (
+                        <Tag color="blue">
+                          {packaging.size.value} {packaging.size.unit} ({packaging.type})
+                        </Tag>
+                      );
+                    }
+                  },
+                  {
+                    title: 'Quantity',
+                    dataIndex: 'quantity',
+                    key: 'quantity',
+                    align: 'center',
+                  },
+                  {
+                    title: 'Unit Price',
+                    dataIndex: 'unitPrice',
+                    key: 'unitPrice',
+                    align: 'right',
+                    render: (price) => `₹${(price || 0).toFixed(2)}`,
+                  },
+                  {
+                    title: 'Total',
+                    dataIndex: 'totalPrice',
+                    key: 'totalPrice',
+                    align: 'right',
+                    render: (total) => <strong>₹{(total || 0).toFixed(2)}</strong>,
+                  }
+                ]}
+              />
+
+              <div style={{ marginTop: 20 }}>
+                <p style={{ fontWeight: 'bold' }}>GST Breakdown:</p>
+                <Table
+                  dataSource={viewingOrder.items.map((item, idx) => {
+                    const product = item.product || {};
+                    const isInclusive = product.taxMethod === 'inclusive';
+                    const igstRate = item.igst || 0;
+                    const cgstRate = item.cgst || 0;
+                    const sgstRate = item.sgst || 0;
+                    const quantity = item.quantity || 0;
+                    const unitPrice = item.unitPrice || 0;
+
+                    const baseAmount = ((item.unitPrice || 0) * (item.quantity || 0));
+                    let discountAmt = 0;
+                    if (item.discountType === 'percentage') {
+                      discountAmt = (baseAmount * (item.discount || 0)) / 100;
+                    } else {
+                      discountAmt = item.discount || 0;
+                    }
+                    const amountAfterDiscount = baseAmount - discountAmt;
+
+                    let taxableValue = 0;
+                    const totalRate = igstRate + cgstRate + sgstRate;
+                    if (isInclusive) {
+                      taxableValue = amountAfterDiscount / (1 + (totalRate / 100));
+                    } else {
+                      taxableValue = amountAfterDiscount;
+                    }
+
+                    return {
+                      key: idx,
+                      productName: product.name || 'Unknown',
+                      hsn: product.hsnCode || '-',
+                      taxableValue: taxableValue,
+                      igstRate, igstAmount: igstRate > 0 ? (taxableValue * igstRate / 100) : 0,
+                      cgstRate, cgstAmount: cgstRate > 0 ? (taxableValue * cgstRate / 100) : 0,
+                      sgstRate, sgstAmount: sgstRate > 0 ? (taxableValue * sgstRate / 100) : 0,
+                    };
+                  })}
+                  pagination={false}
+                  size="small"
+                  bordered
+                  columns={[
+                    { title: 'Product', dataIndex: 'productName', key: 'productName' },
+                    { title: 'HSN/SAC', dataIndex: 'hsn', key: 'hsn' },
+                    {
+                      title: 'Taxable Value',
+                      dataIndex: 'taxableValue',
+                      key: 'taxableValue',
+                      align: 'right',
+                      render: (val) => `₹${val.toFixed(2)}`
+                    },
+                    {
+                      title: 'Total Tax',
+                      key: 'totalTax',
+                      align: 'right',
+                      render: (_, r) => `₹${(r.cgstAmount + r.sgstAmount + r.igstAmount).toFixed(2)}`
+                    }
+                  ]}
+                  summary={pageData => {
+                    let totalTaxable = 0;
+                    let totalTax = 0;
+                    pageData.forEach(({ taxableValue, cgstAmount, sgstAmount, igstAmount }) => {
+                      totalTaxable += taxableValue;
+                      totalTax += (cgstAmount + sgstAmount + igstAmount);
+                    });
+                    return (
+                      <Table.Summary.Row style={{ backgroundColor: '#fafafa', fontWeight: 'bold' }}>
+                        <Table.Summary.Cell index={0} colSpan={2}>Total</Table.Summary.Cell>
+                        <Table.Summary.Cell index={1} align="right">₹{totalTaxable.toFixed(2)}</Table.Summary.Cell>
+                        <Table.Summary.Cell index={2} align="right">₹{totalTax.toFixed(2)}</Table.Summary.Cell>
+                      </Table.Summary.Row>
                     );
-                  }) : (
-                    <tr>
-                      <td colSpan={7} style={{
-                        border: '1px solid #cbd5e1',
-                        padding: '20px',
-                        textAlign: 'center',
-                        fontSize: '12px',
-                        color: '#dc2626',
-                        fontStyle: 'italic',
-                        backgroundColor: '#fef2f2'
-                      }}>
-                        No items found in this order
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-
-              {/* Corporate Light Totals Section */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px', gap: '15px' }}>
-                {/* Tax Summary */}
-                <div style={{ width: '48%' }}>
-                  <table style={{
-                    width: '100%',
-                    border: '1px solid #cbd5e1',
-                    borderCollapse: 'collapse',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
-                  }}>
-                    <thead>
-                      <tr style={{
-                        backgroundColor: '#f1f5f9',
-                        borderBottom: '2px solid #cbd5e1'
-                      }}>
-                        <th colSpan={2} style={{
-                          border: '1px solid #e2e8f0',
-                          padding: '12px',
-                          fontSize: '13px',
-                          fontWeight: '700',
-                          textAlign: 'center',
-                          color: '#334155'
-                        }}>
-                          TAX SUMMARY
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(() => {
-                        // Calculate GST breakdown from order items with null safety
-                        let totalIgst = 0;
-                        let totalCgst = 0;
-                        let totalSgst = 0;
-
-                        viewingOrder?.items?.forEach(item => {
-                          const itemSubtotal = (item?.unitPrice || 0) * (item?.quantity || 0);
-                          const discountAmount = item?.discountType === 'percentage'
-                            ? (itemSubtotal * (item?.discount || 0)) / 100
-                            : (item?.discount || 0);
-                          const afterDiscount = itemSubtotal - discountAmount;
-
-                          if ((item?.igst || 0) > 0) {
-                            totalIgst += (afterDiscount * (item?.igst || 0)) / 100;
-                          } else {
-                            totalCgst += (afterDiscount * (item?.cgst || 0)) / 100;
-                            totalSgst += (afterDiscount * (item?.sgst || 0)) / 100;
-                          }
-                        });
-
-                        const hasAnyTax = totalIgst > 0 || totalCgst > 0 || totalSgst > 0;
-
-                        return (
-                          <>
-                            {totalIgst > 0 ? (
-                              <tr style={{ backgroundColor: '#fefefe' }}>
-                                <td style={{
-                                  border: '1px solid #e2e8f0',
-                                  padding: '8px',
-                                  fontSize: '11px',
-                                  fontWeight: '600',
-                                  color: '#475569'
-                                }}>
-                                  IGST
-                                </td>
-                                <td style={{
-                                  border: '1px solid #e2e8f0',
-                                  padding: '8px',
-                                  fontSize: '11px',
-                                  textAlign: 'right',
-                                  fontWeight: '600',
-                                  color: '#475569'
-                                }}>
-                                  ₹{totalIgst.toFixed(2)}
-                                </td>
-                              </tr>
-                            ) : null}
-                            {totalCgst > 0 ? (
-                              <tr style={{ backgroundColor: '#fefefe' }}>
-                                <td style={{
-                                  border: '1px solid #e2e8f0',
-                                  padding: '8px',
-                                  fontSize: '11px',
-                                  fontWeight: '600',
-                                  color: '#475569'
-                                }}>
-                                  CGST
-                                </td>
-                                <td style={{
-                                  border: '1px solid #e2e8f0',
-                                  padding: '8px',
-                                  fontSize: '11px',
-                                  textAlign: 'right',
-                                  fontWeight: '600',
-                                  color: '#475569'
-                                }}>
-                                  ₹{totalCgst.toFixed(2)}
-                                </td>
-                              </tr>
-                            ) : null}
-                            {totalSgst > 0 ? (
-                              <tr style={{ backgroundColor: '#fefefe' }}>
-                                <td style={{
-                                  border: '1px solid #e2e8f0',
-                                  padding: '8px',
-                                  fontSize: '11px',
-                                  fontWeight: '600',
-                                  color: '#475569'
-                                }}>
-                                  SGST
-                                </td>
-                                <td style={{
-                                  border: '1px solid #e2e8f0',
-                                  padding: '8px',
-                                  fontSize: '11px',
-                                  textAlign: 'right',
-                                  fontWeight: '600',
-                                  color: '#475569'
-                                }}>
-                                  ₹{totalSgst.toFixed(2)}
-                                </td>
-                              </tr>
-                            ) : null}
-                            {!hasAnyTax && (
-                              <tr style={{ backgroundColor: '#f8fafc' }}>
-                                <td colSpan={2} style={{
-                                  border: '1px solid #e2e8f0',
-                                  padding: '12px',
-                                  fontSize: '11px',
-                                  textAlign: 'center',
-                                  color: '#64748b',
-                                  fontStyle: 'italic'
-                                }}>
-                                  🚫 No tax applicable
-                                </td>
-                              </tr>
-                            )}
-                            <tr style={{
-                              backgroundColor: '#1e293b',
-                              color: 'white'
-                            }}>
-                              <td style={{
-                                border: '1px solid #334155',
-                                padding: '10px',
-                                fontSize: '12px',
-                                fontWeight: '700'
-                              }}>
-                                Total Tax
-                              </td>
-                              <td style={{
-                                border: '1px solid #334155',
-                                padding: '10px',
-                                fontSize: '12px',
-                                textAlign: 'right',
-                                fontWeight: '700'
-                              }}>
-                                ₹{(totalIgst + totalCgst + totalSgst).toFixed(2)}
-                              </td>
-                            </tr>
-                          </>
-                        );
-                      })()}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Amount Summary */}
-                <div style={{ width: '48%' }}>
-                  <table style={{
-                    width: '100%',
-                    border: '1px solid #cbd5e1',
-                    borderCollapse: 'collapse',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
-                  }}>
-                    <tbody>
-                      <tr style={{
-                        backgroundColor: '#f1f5f9',
-                        borderBottom: '1px solid #cbd5e1'
-                      }}>
-                        <td style={{
-                          border: '1px solid #e2e8f0',
-                          padding: '12px',
-                          fontSize: '12px',
-                          fontWeight: '700',
-                          color: '#334155'
-                        }}>
-                          Gross Amount
-                        </td>
-                        <td style={{
-                          border: '1px solid #e2e8f0',
-                          padding: '12px',
-                          fontSize: '12px',
-                          textAlign: 'right',
-                          fontWeight: '700',
-                          color: '#334155'
-                        }}>
-                          ₹{(viewingOrder?.pricing?.subtotal || 0).toFixed(2)}
-                        </td>
-                      </tr>
-                      <tr style={{ backgroundColor: '#fefefe' }}>
-                        <td style={{
-                          border: '1px solid #e2e8f0',
-                          padding: '10px',
-                          fontSize: '11px',
-                          color: '#dc2626',
-                          fontWeight: '600'
-                        }}>
-                          🎯 Less: Discount
-                        </td>
-                        <td style={{
-                          border: '1px solid #e2e8f0',
-                          padding: '10px',
-                          fontSize: '11px',
-                          textAlign: 'right',
-                          color: '#dc2626',
-                          fontWeight: '600'
-                        }}>
-                          ₹{(viewingOrder?.pricing?.discount || 0).toFixed(2)}
-                        </td>
-                      </tr>
-                      <tr style={{ backgroundColor: '#fefefe' }}>
-                        <td style={{
-                          border: '1px solid #e2e8f0',
-                          padding: '10px',
-                          fontSize: '11px',
-                          color: '#475569',
-                          fontWeight: '600'
-                        }}>
-                          Add: Total Tax
-                        </td>
-                        <td style={{
-                          border: '1px solid #e2e8f0',
-                          padding: '10px',
-                          fontSize: '11px',
-                          textAlign: 'right',
-                          color: '#475569',
-                          fontWeight: '600'
-                        }}>
-                          ₹{(viewingOrder?.pricing?.tax || 0).toFixed(2)}
-                        </td>
-                      </tr>
-                      <tr style={{
-                        backgroundColor: '#1e293b',
-                        color: '#ffffff'
-                      }}>
-                        <td style={{
-                          border: '1px solid #334155',
-                          padding: '14px',
-                          fontSize: '14px',
-                          fontWeight: '700'
-                        }}>
-                          🏆 GRAND TOTAL
-                        </td>
-                        <td style={{
-                          border: '1px solid #334155',
-                          padding: '14px',
-                          fontSize: '14px',
-                          textAlign: 'right',
-                          fontWeight: '700'
-                        }}>
-                          ₹{(viewingOrder?.pricing?.total || 0).toFixed(2)}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+                  }}
+                />
               </div>
 
-              {/* Corporate Light Terms and Conditions / Notes */}
-              {(viewingOrder?.notes?.customer || viewingOrder?.notes?.internal || viewingOrder?.notes?.delivery) && (
-                <div style={{
-                  margin: '15px 0',
-                  border: '1px solid #cbd5e1',
-                  borderRadius: '6px',
-                  overflow: 'hidden',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
-                }}>
-                  <div style={{
-                    fontWeight: '700',
-                    fontSize: '12px',
-                    padding: '12px',
-                    backgroundColor: '#f1f5f9',
-                    color: '#334155',
-                    borderBottom: '1px solid #e2e8f0'
-                  }}>
-                    📝 REMARKS/NOTES:
-                  </div>
-                  <div style={{
-                    fontSize: '11px',
-                    lineHeight: '1.6',
-                    padding: '15px',
-                    backgroundColor: '#fefefe',
-                    color: '#475569'
-                  }}>
-                    {viewingOrder?.notes?.customer && (
-                      <div style={{ marginBottom: '8px' }}>
-                        <strong>Customer Notes:</strong> {viewingOrder.notes.customer}
-                      </div>
+              <Row justify="end" style={{ marginTop: 20 }}>
+                <Col span={10}>
+                  <Descriptions column={1} bordered size="small">
+                    <Descriptions.Item label="Subtotal">₹{(viewingOrder.pricing?.subtotal || 0).toFixed(2)}</Descriptions.Item>
+                    <Descriptions.Item label="Discount">₹{(viewingOrder.pricing?.discount || 0).toFixed(2)}</Descriptions.Item>
+                    <Descriptions.Item label="Tax">₹{(viewingOrder.pricing?.tax || 0).toFixed(2)}</Descriptions.Item>
+                    {viewingOrder.pricing?.customAdjustment && Number(viewingOrder.pricing.customAdjustment.amount) !== 0 && (
+                      <Descriptions.Item label={viewingOrder.pricing.customAdjustment.name || viewingOrder.pricing.customAdjustment.text || "Adjustment"}>
+                        {Number(viewingOrder.pricing.customAdjustment.amount) > 0 ? '+' : ''}₹{Number(viewingOrder.pricing.customAdjustment.amount).toFixed(2)}
+                      </Descriptions.Item>
                     )}
-                    {viewingOrder?.notes?.internal && (
-                      <div style={{ marginBottom: '8px' }}>
-                        <strong>Internal Notes:</strong> {viewingOrder.notes.internal}
-                      </div>
-                    )}
-                    {viewingOrder?.notes?.delivery && (
-                      <div style={{ marginBottom: '8px' }}>
-                        <strong>Delivery Notes:</strong> {viewingOrder.notes.delivery}
-                      </div>
-                    )}
-                    {!viewingOrder?.notes?.customer && !viewingOrder?.notes?.internal && !viewingOrder?.notes?.delivery && 'No remarks available'}
-                  </div>
-                </div>
-              )}
+                    <Descriptions.Item label="Grand Total"><Text strong style={{ fontSize: 16 }}>₹{(viewingOrder.pricing?.total || 0).toFixed(2)}</Text></Descriptions.Item>
+                  </Descriptions>
 
-              {/* Corporate Light Amount in Words */}
-              <div style={{
-                margin: '15px 0',
-                border: '1px solid #cbd5e1',
-                borderRadius: '6px',
-                overflow: 'hidden',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
-              }}>
-                <div style={{
-                  fontWeight: '700',
-                  fontSize: '12px',
-                  padding: '12px',
-                  backgroundColor: '#f1f5f9',
-                  color: '#334155',
-                  borderBottom: '1px solid #e2e8f0'
-                }}>
-                  💬 Amount in Words:
-                </div>
-                <div style={{
-                  fontSize: '12px',
-                  fontStyle: 'italic',
-                  padding: '15px',
-                  backgroundColor: '#fefefe',
-                  color: '#1e293b',
-                  fontWeight: '600'
-                }}>
+                  {/* Calculated Package & Unit Totals for Invoice */}
                   {(() => {
-                    const totalAmount = viewingOrder?.pricing?.total || 0;
-                    const rupees = Math.floor(totalAmount);
-                    const paise = Math.round((totalAmount % 1) * 100);
-                    return `Indian Rupees ${rupees.toLocaleString('en-IN')}${paise > 0 ? ` and ${paise} Paise` : ''} Only`;
+                    const { totalLitres, totalKg, packageBreakdown } = calculateOrderDetailsHelper(viewingOrder.items || []);
+                    return (
+                      <div style={{ marginTop: 20, padding: 10, border: '1px solid #f0f0f0', background: '#fafafa' }}>
+                        <Text strong>Package Summary:</Text>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 5 }}>
+                          {totalLitres > 0 && <Tag color="blue">Total Litres: {totalLitres.toFixed(2)} L</Tag>}
+                          {totalKg > 0 && <Tag color="green">Total Kg: {totalKg.toFixed(2)} Kg</Tag>}
+                          {Object.entries(packageBreakdown || {}).map(([type, count]) => (
+                            <Tag key={type} color="cyan">Total {type}s: {count}</Tag>
+                          ))}
+                        </div>
+                      </div>
+                    );
                   })()}
-                </div>
+
+                </Col>
+              </Row>
+
+              <div style={{ marginTop: 40, textAlign: 'center', fontSize: 12, color: '#888' }}>
+                <p>Thank you for your business!</p>
               </div>
 
-              {/* Corporate Light Bank Details and Signature Section */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '15px', gap: '15px' }}>
-                <div style={{
-                  width: '48%',
-                  border: '1px solid #cbd5e1',
-                  borderRadius: '6px',
-                  overflow: 'hidden',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
-                }}>
-                  <div style={{
-                    fontWeight: '700',
-                    fontSize: '12px',
-                    padding: '12px',
-                    backgroundColor: '#f1f5f9',
-                    color: '#334155',
-                    borderBottom: '1px solid #e2e8f0'
-                  }}>
-                    🏦 BANK DETAILS:
-                  </div>
-                  <div style={{
-                    fontSize: '11px',
-                    lineHeight: '1.5',
-                    padding: '15px',
-                    backgroundColor: '#fefefe',
-                    color: '#475569'
-                  }}>
-                    Bank Name: <strong style={{ color: '#1e293b' }}>State Bank of India</strong><br />
-                    Account No: <strong style={{ color: '#1e293b' }}>1234567890</strong><br />
-                    IFSC Code: <strong style={{ color: '#1e293b' }}>SBIN0001234</strong><br />
-                    Branch: <strong style={{ color: '#1e293b' }}>Milk City Branch</strong>
-                  </div>
-                </div>
-
-                <div style={{
-                  width: '48%',
-                  border: '1px solid #cbd5e1',
-                  borderRadius: '6px',
-                  overflow: 'hidden',
-                  textAlign: 'center',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
-                }}>
-                  <div style={{
-                    fontWeight: '700',
-                    fontSize: '12px',
-                    padding: '12px',
-                    backgroundColor: '#f1f5f9',
-                    color: '#334155',
-                    borderBottom: '1px solid #e2e8f0'
-                  }}>
-                    AUTHORIZATION
-                  </div>
-                  <div style={{
-                    padding: '20px 15px 15px 15px',
-                    backgroundColor: '#fefefe',
-                    color: '#475569',
-                    minHeight: '80px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between'
-                  }}>
-                    <div style={{
-                      fontWeight: '600',
-                      fontSize: '11px',
-                      marginBottom: '20px',
-                      color: '#1e293b'
-                    }}>
-                      FOR {company?.name?.toUpperCase() || 'COMPANY NAME'}
-                    </div>
-                    <div style={{
-                      borderTop: '1px solid #cbd5e1',
-                      paddingTop: '10px',
-                      fontSize: '10px',
-                      fontWeight: '600',
-                      color: '#64748b'
-                    }}>
-                      📝 Authorized Signatory
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Corporate Light Footer */}
-              <div style={{
-                marginTop: '20px',
-                textAlign: 'center',
-                borderTop: '1px solid #cbd5e1',
-                paddingTop: '15px',
-                fontSize: '10px',
-                color: '#64748b',
-                backgroundColor: '#f8fafc',
-                padding: '15px',
-                borderRadius: '6px',
-                border: '1px solid #e2e8f0'
-              }}>
-                <div style={{ fontWeight: '600', marginBottom: '5px', color: '#475569' }}>
-                  This is a computer generated invoice and does not require signature
-                </div>
-                <div style={{ color: '#64748b' }}>
-                  Generated on {dayjs().format('DD/MM/YYYY HH:mm')} | Powered by Milk Distribution System
-                </div>
-              </div>
             </div>
           </>
         )}
-      </Modal>
+      </Modal >
 
       {/* Payment Completion Modal */}
-      <Modal
+      < Modal
         title="Complete Payment"
         visible={paymentModalVisible}
         onCancel={() => {
@@ -3303,116 +2979,117 @@ const Orders = () => {
         footer={null}
         width={600}
       >
-        {paymentModalLoading ? (
-          <div style={{ textAlign: 'center', padding: '40px' }}>
-            <Spin size="large" />
-            <div style={{ marginTop: 16 }}>Loading latest payment information...</div>
-          </div>
-        ) : paymentOrder && (
-          <Form
-            layout="vertical"
-            onFinish={handlePaymentComplete}
-            initialValues={{
-              paymentMethod: paymentOrder.payment?.method || 'cash',
-              paidAmount: paymentOrder.payment?.dueAmount || paymentOrder.pricing?.total || 0
-            }}
-          >
-            <Row gutter={16}>
-              <Col span={24}>
-                <Alert
-                  type="info"
-                  message={`Order: ${paymentOrder.orderNumber}`}
-                  description={
-                    <div>
-                      <div>Total Amount: ₹{(paymentOrder.pricing?.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-                      <div>Payment Method: {paymentOrder.payment?.method || 'cash'}</div>
-                      <div>Current Status: {paymentOrder.payment?.status || 'pending'}</div>
-                      {paymentOrder.payment?.paidAmount > 0 && (
-                        <div style={{ marginTop: 8 }}>
-                          <div style={{ color: '#52c41a' }}>Already Paid: ₹{(paymentOrder.payment.paidAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-                          <div style={{ color: '#f5222d' }}>Remaining Due: ₹{(paymentOrder.payment.dueAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-                        </div>
-                      )}
-                    </div>
-                  }
-                  style={{ marginBottom: 20 }}
-                />
-              </Col>
-            </Row>
-
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item
-                  name="paymentMethod"
-                  label="Payment Method"
-                >
-                  <Select disabled>
-                    <Option value="cash">Cash</Option>
-                    <Option value="card">Card</Option>
-                    <Option value="bank-transfer">Bank Transfer</Option>
-                    <Option value="digital-wallet">Digital Wallet</Option>
-                    <Option value="credit">Credit</Option>
-                    <Option value="cheque">Cheque</Option>
-                  </Select>
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item
-                  name="paidAmount"
-                  label="Amount Received"
-                  rules={[
-                    { required: true, message: 'Please enter amount received' },
-                    { type: 'number', min: 0, message: 'Amount must be positive' }
-                  ]}
-                >
-                  <InputNumber
-                    style={{ width: '100%' }}
-                    placeholder="Amount received"
-                    prefix="₹"
-                    min={0}
-                    precision={2}
+        {
+          paymentModalLoading ? (
+            <div style={{ textAlign: 'center', padding: '40px' }} >
+              <Spin size="large" />
+              <div style={{ marginTop: 16 }}>Loading latest payment information...</div>
+            </div >
+          ) : paymentOrder && (
+            <Form
+              layout="vertical"
+              onFinish={handlePaymentComplete}
+              initialValues={{
+                paymentMethod: paymentOrder.payment?.method || 'cash',
+                paidAmount: paymentOrder.payment?.dueAmount || paymentOrder.pricing?.total || 0
+              }}
+            >
+              <Row gutter={16}>
+                <Col span={24}>
+                  <Alert
+                    type="info"
+                    message={`Order: ${paymentOrder.orderNumber}`}
+                    description={
+                      <div>
+                        <div>Total Amount: ₹{(paymentOrder.pricing?.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                        <div>Payment Method: {paymentOrder.payment?.method || 'cash'}</div>
+                        <div>Current Status: {paymentOrder.payment?.status || 'pending'}</div>
+                        {paymentOrder.payment?.paidAmount > 0 && (
+                          <div style={{ marginTop: 8 }}>
+                            <div style={{ color: '#52c41a' }}>Already Paid: ₹{(paymentOrder.payment.paidAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                            <div style={{ color: '#f5222d' }}>Remaining Due: ₹{(paymentOrder.payment.dueAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                          </div>
+                        )}
+                      </div>
+                    }
+                    style={{ marginBottom: 20 }}
                   />
-                </Form.Item>
-              </Col>
-            </Row>
+                </Col>
+              </Row>
 
-            <Row gutter={16}>
-              <Col span={24}>
-                <Form.Item
-                  name="transactionId"
-                  label="Transaction ID (Optional)"
-                >
-                  <Input placeholder="Transaction reference number" />
-                </Form.Item>
-              </Col>
-            </Row>
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item
+                    name="paymentMethod"
+                    label="Payment Method"
+                  >
+                    <Select disabled>
+                      <Option value="cash">Cash</Option>
+                      <Option value="card">Card</Option>
+                      <Option value="bank-transfer">Bank Transfer</Option>
+                      <Option value="digital-wallet">Digital Wallet</Option>
+                      <Option value="credit">Credit</Option>
+                      <Option value="cheque">Cheque</Option>
+                    </Select>
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item
+                    name="paidAmount"
+                    label="Amount Received"
+                    rules={[
+                      { required: true, message: 'Please enter amount received' },
+                      { type: 'number', min: 0, message: 'Amount must be positive' }
+                    ]}
+                  >
+                    <InputNumber
+                      style={{ width: '100%' }}
+                      placeholder="Amount received"
+                      prefix="₹"
+                      min={0}
+                      precision={2}
+                    />
+                  </Form.Item>
+                </Col>
+              </Row>
 
-            <Row gutter={16}>
-              <Col span={24} style={{ textAlign: 'right' }}>
-                <Space>
-                  <Button
-                    onClick={() => {
-                      setPaymentModalVisible(false);
-                      setPaymentOrder(null);
-                    }}
+              <Row gutter={16}>
+                <Col span={24}>
+                  <Form.Item
+                    name="transactionId"
+                    label="Transaction ID (Optional)"
                   >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="primary"
-                    htmlType="submit"
-                    loading={loading}
-                    icon={<DollarOutlined />}
-                  >
-                    Complete Payment
-                  </Button>
-                </Space>
-              </Col>
-            </Row>
-          </Form>
-        )}
-      </Modal>
-    </div>
+                    <Input placeholder="Transaction reference number" />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Row gutter={16}>
+                <Col span={24} style={{ textAlign: 'right' }}>
+                  <Space>
+                    <Button
+                      onClick={() => {
+                        setPaymentModalVisible(false);
+                        setPaymentOrder(null);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="primary"
+                      htmlType="submit"
+                      loading={loading}
+                      icon={<DollarOutlined />}
+                    >
+                      Complete Payment
+                    </Button>
+                  </Space>
+                </Col>
+              </Row>
+            </Form>
+          )}
+      </Modal >
+    </div >
   );
 };
 
