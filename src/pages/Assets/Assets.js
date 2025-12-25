@@ -258,8 +258,14 @@ const Assets = () => {
                         rules={[{ required: true, message: 'Please select type' }]}
                     >
                         <Select>
-                            <Option value="crate">Crate</Option>
+                            <Option value="bottle">Bottle</Option>
+                            <Option value="carton">Carton</Option>
+                            <Option value="pouch">Pouch</Option>
                             <Option value="can">Can</Option>
+                            <Option value="jar">Jar</Option>
+                            <Option value="bag">Bag</Option>
+                            <Option value="bulk">Bulk</Option>
+                            <Option value="crate">Crate</Option>
                             <Option value="pallet">Pallet</Option>
                             <Option value="container">Container</Option>
                             <Option value="other">Other</Option>

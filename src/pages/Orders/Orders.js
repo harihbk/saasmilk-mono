@@ -497,6 +497,7 @@ const Orders = () => {
     let totalLitres = 0;
     let totalKg = 0;
     let totalPackages = 0;
+    let totalUnits = 0;
     const packageBreakdown = {};
 
     items.forEach(item => {
@@ -509,6 +510,18 @@ const Orders = () => {
       }
 
       const quantity = item.quantity || 0;
+      let multiplier = 1;
+
+      // Determine items per pack (multiplier)
+      if (product && product.unit) {
+        const parsedUnit = parseFloat(product.unit);
+        if (!isNaN(parsedUnit) && parsedUnit > 0) {
+          multiplier = parsedUnit;
+        }
+      }
+
+      // Calculate Total Units (Base Items)
+      totalUnits += quantity * multiplier;
 
       // Calculate Packages (Crates, Cartons, Bags, Boxes)
       if (product && product.packaging && ['crate', 'carton', 'bag', 'box'].includes(product.packaging.type)) {
@@ -522,17 +535,21 @@ const Orders = () => {
       if (product?.packaging?.size?.value) {
         let volume = parseFloat(product.packaging.size.value);
         const unit = product.packaging.size.unit?.toLowerCase();
-        let multiplier = 1;
 
-        // Handle multipack case: Multiply by product.unit (items per pack)
-        if (['crate', 'carton', 'bag', 'box'].includes(product.packaging.type) && product.unit) {
-          const parsedUnit = parseFloat(product.unit);
-          if (!isNaN(parsedUnit)) {
-            multiplier = parsedUnit;
-          }
+        // multiplier is already calculated above, use it here too if logic requires
+        // Current logic in file used:
+        // if (['crate', 'carton', 'bag', 'box'].includes(product.packaging.type) && product.unit) { ... }
+        // The previous logic for multiplier seems consistent with my new multiplier logic,
+        // but let's stick to the existing volume calculation structure to be safe, just using the new multiplier variable if applicable for volume
+
+        // Re-deriving multiplier strictly for volume to avoid side effects if 'unit' means something else for non-package types
+        let volumeMultiplier = 1;
+        if (['crate', 'carton', 'bag', 'box'].includes(product?.packaging?.type) && product?.unit) {
+          const parsed = parseFloat(product.unit);
+          if (!isNaN(parsed)) volumeMultiplier = parsed;
         }
 
-        const totalSize = volume * multiplier * quantity;
+        const totalSize = volume * volumeMultiplier * quantity;
 
         if (unit === 'ml') {
           totalLitres += totalSize / 1000;
@@ -546,7 +563,9 @@ const Orders = () => {
       }
     });
 
-    return { totalLitres, totalKg, totalPackages, packageBreakdown };
+    // If totalUnits equals totalPackages (e.g. everything is 1 per pack), we might hide it or show it.
+    // User requested "bring based on products bring total no of package units".
+    return { totalLitres, totalKg, totalPackages, totalUnits, packageBreakdown };
   };
 
   const calculateOrderTotals = () => {
@@ -1021,7 +1040,8 @@ const Orders = () => {
       fetchOrders();
     } catch (error) {
       console.error('Error deleting order:', error);
-      message.error('Failed to delete order');
+      const errorMessage = error.response?.data?.message || 'Failed to delete order';
+      message.error(errorMessage);
     }
   };
 
@@ -2147,7 +2167,7 @@ const Orders = () => {
               </Row>
 
               {/* Unit Totals */}
-              {(orderTotals.totalLitres > 0 || orderTotals.totalKg > 0) && (
+              {(orderTotals.totalLitres > 0 || orderTotals.totalKg > 0 || orderTotals.totalUnits > 0) && (
                 <Row gutter={16} style={{ marginBottom: 12 }}>
                   {orderTotals.totalLitres > 0 && (
                     <Col span={6}>
@@ -2157,6 +2177,11 @@ const Orders = () => {
                   {orderTotals.totalKg > 0 && (
                     <Col span={6}>
                       <Text strong style={{ fontSize: '12px' }}>Total Kg: {orderTotals.totalKg.toFixed(2)} Kg</Text>
+                    </Col>
+                  )}
+                  {orderTotals.totalUnits > 0 && (
+                    <Col span={6}>
+                      <Text strong style={{ fontSize: '12px' }}>Total Units: {orderTotals.totalUnits}</Text>
                     </Col>
                   )}
                 </Row>

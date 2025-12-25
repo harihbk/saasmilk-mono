@@ -407,6 +407,15 @@ const Receipts = () => {
             }
         },
         {
+            title: 'Receipt Status',
+            key: 'status',
+            render: (_, record) => (
+                <Tag color={record.status === 'cancelled' ? 'red' : 'green'}>
+                    {record.status ? record.status.toUpperCase() : 'ACTIVE'}
+                </Tag>
+            )
+        },
+        {
             title: 'Payment Due',
             key: 'paymentDue',
             render: (_, record) => {

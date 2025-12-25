@@ -15,7 +15,8 @@ import {
     Tabs,
     Row,
     Col,
-    Popconfirm
+    Popconfirm,
+    Divider
 } from 'antd';
 import {
     PlusOutlined,
@@ -25,7 +26,7 @@ import {
     DeleteOutlined,
     EditOutlined
 } from '@ant-design/icons';
-import { gatePassesAPI, assetsAPI, companiesAPI, fleetAPI, usersAPI } from '../../services/api';
+import { gatePassesAPI, assetsAPI, companiesAPI, fleetAPI, usersAPI, ordersAPI } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import dayjs from 'dayjs';
 
@@ -41,10 +42,21 @@ const GatePass = () => {
     const [vehicles, setVehicles] = useState([]);
     const [drivers, setDrivers] = useState([]);
     const [company, setCompany] = useState(null);
+    const [activeOutwardPasses, setActiveOutwardPasses] = useState([]);
+    const [selectedOutwardPass, setSelectedOutwardPass] = useState(null);
     const [loading, setLoading] = useState(false);
     const [modalVisible, setModalVisible] = useState(false);
     const [editingPass, setEditingPass] = useState(null);
+    const [orders, setOrders] = useState([]);
     const [form] = Form.useForm();
+
+    useEffect(() => {
+        if (activeTab === 'outward') {
+            fetchOrders();
+        } else {
+            fetchActiveOutwardPasses();
+        }
+    }, [activeTab]);
 
     useEffect(() => {
         fetchGatePasses();
@@ -77,10 +89,38 @@ const GatePass = () => {
 
     const fetchDrivers = async () => {
         try {
-            const response = await usersAPI.getUsers({ role: 'driver', limit: 100 });
+            // Try fetching with 'Driver' (common role name) - backend handles case insensitivity now
+            const response = await usersAPI.getUsers({ role: 'Driver', limit: 100 });
             setDrivers(response.data.data.users || []);
         } catch (error) {
             console.error('Error fetching drivers:', error);
+        }
+    };
+
+    const fetchOrders = async () => {
+        try {
+            // Fetch both confirmed and completed orders
+            // Filter out already "outwarded" orders
+            const response = await ordersAPI.getOrders({
+                status: 'confirmed,completed,ready,packed,processing',
+                limit: 100,
+                outward: 'false'
+            });
+            setOrders(response.data.data.orders || []);
+        } catch (error) {
+            console.error('Error fetching orders:', error);
+        }
+    };
+
+    const fetchActiveOutwardPasses = async () => {
+        try {
+            const response = await gatePassesAPI.getOutwardActive();
+            console.log('Outward Active Response:', response.data);
+            const passes = response.data.data.passes || [];
+            console.log('Setting Active Outward Passes:', passes);
+            setActiveOutwardPasses(passes);
+        } catch (error) {
+            console.error('Error fetching outward passes:', error);
         }
     };
 
@@ -111,18 +151,101 @@ const GatePass = () => {
 
     const handleSubmit = async (values) => {
         try {
-            const formattedAssets = values.items.map(item => ({
-                asset: item.assetId,
-                quantity: item.quantity
-            }));
+            // If Inward, items are Assets. If Outward with Orders, items are Orders.
+            let formattedAssets = [];
+            let orderIds = [];
+            let payloadItems = [];
+
+            if (activeTab === 'outward') {
+                // Outward: Calculate assets from selected orders (scaled by user edit)
+                const assetBreakdown = {}; // { 'crate': 10, 'box': 5 }
+
+                values.items.forEach(item => {
+                    if (item.orderId) {
+                        orderIds.push(item.orderId);
+                        const order = orders.find(o => o._id === item.orderId);
+
+                        if (order) {
+                            // Get theoretical breakdown
+                            const { totalPackages, rawBreakdown } = calculateOrderPackages(order);
+
+                            // User edited quantity
+                            const userQty = Number(item.quantity) || 0;
+
+                            // Calculate scale factor (if totalPackages is 0, avoid NaN)
+                            const scale = totalPackages > 0 ? (userQty / totalPackages) : (userQty > 0 ? 1 : 0);
+
+                            // Apply scale to each type in breakdown
+                            Object.entries(rawBreakdown).forEach(([type, count]) => {
+                                // Scale and round (ceil) to ensure enough capacity
+                                const scaledCount = Math.ceil(count * scale);
+
+                                if (scaledCount > 0) {
+                                    assetBreakdown[type] = (assetBreakdown[type] || 0) + scaledCount;
+
+                                    // Push detailed item for backend hook
+                                    payloadItems.push({
+                                        order: order._id,
+                                        packageType: type,
+                                        quantity: scaledCount,
+                                        notes: `Manifest Qty: ${userQty} (Scaled from ${totalPackages})`
+                                    });
+                                }
+                            });
+
+                            // Fallback: If calculation yielded 0 but user entered quantity, default to 'crate' or first type
+                            if (Object.keys(rawBreakdown).length === 0 && userQty > 0) {
+                                const defaultType = 'crate';
+                                assetBreakdown[defaultType] = (assetBreakdown[defaultType] || 0) + userQty;
+                                payloadItems.push({
+                                    order: order._id,
+                                    packageType: defaultType,
+                                    quantity: userQty,
+                                    notes: `Manual Entry: ${userQty}`
+                                });
+                            }
+                        }
+                    }
+                });
+
+                // Map breakdown keys (crate, box) to Asset IDs
+                formattedAssets = Object.entries(assetBreakdown).map(([type, count]) => {
+                    // Find asset with matching type (case-insensitive) or name
+                    const asset = assets.find(a =>
+                        (a.type && a.type.toLowerCase() === type) ||
+                        (a.name && a.name.toLowerCase().includes(type))
+                    );
+                    if (asset) {
+                        return { asset: asset._id, quantity: count };
+                    }
+                    return null;
+                }).filter(Boolean);
+
+                if (formattedAssets.length === 0 && orderIds.length > 0) {
+                    // Fallback handled by backend validation or empty array
+                }
+
+            } else {
+                // Inward: Items are manually selected Assets (pending returns logic uses assetId)
+                formattedAssets = values.items.map(item => ({
+                    asset: item.assetId,
+                    quantity: item.quantity
+                }));
+            }
 
             const payload = {
                 ...values,
                 type: activeTab,
-                assets: formattedAssets
+                assets: formattedAssets,
+                orders: orderIds
             };
 
-            delete payload.items;
+            // For Outward, we send the detailed items manifest for the hook
+            if (activeTab === 'outward') {
+                payload.items = payloadItems;
+            } else {
+                delete payload.items;
+            }
 
             if (editingPass) {
                 await gatePassesAPI.updateGatePass(editingPass._id, payload);
@@ -138,10 +261,12 @@ const GatePass = () => {
             fetchGatePasses();
             fetchAssets();
         } catch (error) {
-            console.error('Error saving pass:', error);
+            console.error('Error saving gate pass:', error);
             message.error(error.response?.data?.message || 'Failed to save gate pass');
         }
     };
+
+
 
     const handleDelete = async (id) => {
         try {
@@ -171,15 +296,52 @@ const GatePass = () => {
     };
 
     const handleVehicleChange = async (value) => {
-        const selectedVehicle = vehicles.find(v => v.vehicleNumber === value);
+        const selectedVehicle = vehicles.find(v => v._id === value);
+
         if (selectedVehicle && selectedVehicle.assignedDriver) {
-            // Check if assignedDriver is populated object or ID
+            let driverId = null;
+            let driverPhone = '';
+            let shouldSelectDriver = false;
+
             if (typeof selectedVehicle.assignedDriver === 'object') {
-                form.setFieldsValue({
-                    driverName: selectedVehicle.assignedDriver.name,
-                    driverPhone: selectedVehicle.assignedDriver.phone || ''
-                });
+                // Populated object
+                driverId = selectedVehicle.assignedDriver._id;
+                driverPhone = selectedVehicle.assignedDriver.phone || '';
+            } else {
+                // ID string
+                driverId = selectedVehicle.assignedDriver;
             }
+
+            // Check if this driver is in our dropdown list
+            const driverInList = drivers.find(d => d._id === driverId);
+
+            if (driverInList) {
+                shouldSelectDriver = true;
+                // Prefer info from list if needed, but phone from vehicle population is fine
+                if (!driverPhone && driverInList.phone) {
+                    driverPhone = driverInList.phone;
+                }
+            } else if (!driverPhone && driverId) {
+                // If we have ID but no phone (and not in list), try to fetch to at least get phone
+                try {
+                    const userRes = await usersAPI.getUser(driverId);
+                    if (userRes.data?.data?.user) {
+                        driverPhone = userRes.data.data.user.phone || '';
+                    }
+                } catch (err) {
+                    console.error('Failed to fetch driver details', err);
+                }
+            }
+
+            // Only set the Driver Name dropdown if it exists in the list (avoids ID display)
+            if (shouldSelectDriver) {
+                form.setFieldsValue({ driver: driverId });
+            } else {
+                form.setFieldsValue({ driver: null }); // Clear if not in list
+            }
+
+            // Always set the phone if we found it
+            form.setFieldsValue({ driverPhone: driverPhone });
         }
 
         // Auto-fill pending items for Inward pass
@@ -212,13 +374,80 @@ const GatePass = () => {
     };
 
     const handleDriverChange = (value) => {
-        const selectedDriver = drivers.find(d => d.name === value);
+        const selectedDriver = drivers.find(d => d._id === value);
         if (selectedDriver) {
             form.setFieldsValue({
                 driverPhone: selectedDriver.phone || ''
             });
         }
-    }
+    };
+
+    const handleOutwardPassChange = async (passId) => {
+        const pass = activeOutwardPasses.find(p => p._id === passId);
+        if (pass) {
+            setSelectedOutwardPass(pass);
+            form.setFieldsValue({ referenceGatePass: pass._id });
+
+            // Auto-fill Vehicle
+            if (pass.vehicle) {
+                // Handle populated object or ID
+                const vehicleId = typeof pass.vehicle === 'object' ? pass.vehicle._id : pass.vehicle;
+                form.setFieldsValue({ vehicle: vehicleId });
+                // Trigger vehicle change logic if needed, or just set driver
+                handleVehicleChange(vehicleId); // This might autofill driver if linked
+            }
+
+            // Auto-fill Driver (override vehicle's default if specific driver was on pass)
+            if (pass.driver) {
+                const driverId = typeof pass.driver === 'object' ? pass.driver._id : pass.driver;
+                const driverPhone = typeof pass.driver === 'object' ? pass.driver.phone : pass.driverPhone;
+                form.setFieldsValue({
+                    driver: driverId,
+                    driverPhone: driverPhone
+                });
+            }
+
+            // Auto-fill Assets (Fetch calculated pending quantities)
+            try {
+                const response = await gatePassesAPI.getPendingReturns({ gatePassId: pass._id });
+                const data = response.data.data;
+
+                if (data && data.items && data.items.length > 0) {
+                    const formItems = data.items.map(item => ({
+                        assetId: item.assetId,
+                        quantity: item.quantity, // Calculated remaining quantity
+                        notes: ''
+                    }));
+                    form.setFieldsValue({ items: formItems });
+                    message.success(`Loaded items from Pass ${data.passNumber} (Remaining Quantities)`);
+                } else {
+                    // Fallback to original assets if no calculation returned (e.g. fully returned)
+                    // Or maybe show empty?
+                    // If fully returned, items array is empty.
+                    if (pass.assets && pass.assets.length > 0) {
+                        // Optional: Warn user it's fully returned?
+                        // "No pending items found (Fully Returned?)"
+                        form.setFieldsValue({ items: [] });
+                        message.info('This pass appears to be fully returned already.');
+                    }
+                }
+            } catch (error) {
+                console.error('Error calculating pending returns:', error);
+                // Fallback to local data
+                if (pass.assets && pass.assets.length > 0) {
+                    const formItems = pass.assets.map(a => ({
+                        assetId: a.asset._id || a.asset,
+                        quantity: a.quantity,
+                        notes: 'Fallback (Original Qty)'
+                    }));
+                    form.setFieldsValue({ items: formItems });
+                }
+            }
+        } else {
+            setSelectedOutwardPass(null);
+            form.resetFields(['vehicle', 'driver', 'driverPhone', 'items']);
+        }
+    };
 
     const handlePrint = (pass) => {
         const printWindow = window.open('', '_blank');
@@ -227,16 +456,37 @@ const GatePass = () => {
             return;
         }
 
-        const itemsHtml = pass.assets.map(item => `
-            <tr>
-                <td style="padding: 4px; border-bottom: 1px solid #ddd;">${item.asset?.name || 'Unknown'}</td>
-                <td style="padding: 4px; border-bottom: 1px solid #ddd; text-align: right;">${item.quantity}</td>
-            </tr>
-        `).join('');
+        const vehicleNo =
+            pass.vehicle?.vehicleNumber ||
+            pass.vehicleNumber ||
+            pass.vehicle ||
+            '-';
 
+        const driverName =
+            pass.driver?.name ||
+            pass.driverName ||
+            '-';
+
+        const driverPhone =
+            pass.driver?.phone ||
+            pass.driverPhone ||
+            '-';
+
+        const ordersText = pass.orders?.length
+            ? pass.orders.map(o => o.orderNumber).join(', ')
+            : pass.order?.orderNumber || '-';
+
+        const itemsHtml = pass.assets.map(item => `
+    <tr>
+      <td>${item.asset?.name || 'Unknown'}</td>
+      <td style="text-align:right">${item.quantity}</td>
+    </tr>
+  `).join('');
+
+        // Restore Logo and Address Logic
         const logoHtml = company?.settings?.theme?.logo
             ? `<div style="text-align:center; margin-bottom:5px;"><img src="${company.settings.theme.logo}" style="max-width:50mm; max-height:20mm;" /></div>`
-            : `<h2>${company?.name || 'MILK COMPANY'}</h2>`;
+            : `<h2 style="text-align:center; margin-bottom:5px;">${company?.name || 'MILK COMPANY'}</h2>`;
 
         const address = company?.contactInfo?.address || {};
         const addressHtml = [
@@ -244,108 +494,83 @@ const GatePass = () => {
             address.city,
             address.state,
             address.postalCode
-        ].filter(Boolean).join(', ') || '123 Dairy Road, Milk City';
+        ].filter(Boolean).join(', ') || '';
 
-        const phoneHtml = company?.contactInfo?.phone ? `<p>Phone: ${company.contactInfo.phone}</p>` : '';
+        const phoneHtml = company?.contactInfo?.phone ? `<div style="text-align:center; font-size:10px;">Phone: ${company.contactInfo.phone}</div>` : '';
+
 
         const html = `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Gate Pass ${pass.passNumber}</title>
-                <style>
-                    body {
-                        font-family: 'Courier New', Courier, monospace;
-                        width: 80mm;
-                        margin: 0;
-                        padding: 10px;
-                        font-size: 12px;
-                    }
-                    .header { text-align: center; margin-bottom: 10px; }
-                    .header h2 { margin: 0; font-size: 16px; font-weight: bold; }
-                    .header p { margin: 2px 0; font-size: 10px; }
-                    .divider { border-top: 1px dashed #000; margin: 10px 0; }
-                    .info-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
-                    .label { font-weight: bold; }
-                    table { width: 100%; border-collapse: collapse; margin-top: 5px; }
-                    th { text-align: left; border-bottom: 1px solid #000; padding: 4px; font-size: 10px; }
-                    .footer { margin-top: 30px; text-align: center; font-size: 10px; }
-                    .signatures { display: flex; justify-content: space-between; margin-top: 40px; }
-                    .sig-block { border-top: 1px solid #000; width: 40%; text-align: center; padding-top: 5px; }
-                    @media print {
-                        @page { margin: 0; size: 80mm auto; }
-                    }
-                </style>
-            </head>
-            <body>
-                <div class="header">
-                    ${logoHtml}
-                    ${!company?.settings?.theme?.logo ? '' : `<p style="font-weight:bold;">${company?.name}</p>`}
-                    <p>${addressHtml}</p>
-                    ${phoneHtml}
-                    <div class="divider"></div>
-                    <h3>${pass.type === 'outward' ? 'OUTWARD GATE PASS' : 'INWARD GATE PASS'}</h3>
-                </div>
+  <html>
+    <head>
+      <title>Gate Pass ${pass.passNumber}</title>
+      <style>
+        body { font-family: monospace; width: 80mm; font-size: 12px; }
+        .row { display:flex; justify-content:space-between; margin:4px 0 }
+        table { width:100%; border-collapse: collapse }
+        th, td { border-bottom:1px solid #000; padding:4px }
+        .divider { border-top:1px dashed #000; margin:8px 0 }
+      </style>
+    </head>
+    <body>
+      ${logoHtml}
+      ${!company?.settings?.theme?.logo ? '' : `<div style="text-align:center; font-weight:bold; margin-bottom:2px;">${company?.name}</div>`}
+      <div style="text-align:center; font-size:10px; margin-bottom:2px;">${addressHtml}</div>
+      ${phoneHtml}
 
-                <div class="info-row">
-                    <span class="label">Pass No:</span>
-                    <span>${pass.passNumber}</span>
-                </div>
-                <div class="info-row">
-                    <span class="label">Date:</span>
-                    <span>${dayjs(pass.createdAt).format('DD/MM/YYYY HH:mm')}</span>
-                </div>
-                <div class="divider"></div>
-                
-                <div class="info-row">
-                    <span class="label">Vehicle No:</span>
-                    <span>${pass.vehicle || '-'}</span>
-                </div>
-                <div class="info-row">
-                    <span class="label">Driver:</span>
-                    <span>${pass.driverName || '-'}</span>
-                </div>
-                <div class="info-row">
-                    <span class="label">Phone:</span>
-                    <span>${pass.driverPhone || '-'}</span>
-                </div>
-                
-                <table style="margin-top: 10px;">
-                    <thead>
-                        <tr>
-                            <th>Asset Item</th>
-                            <th style="text-align: right;">Qty</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${itemsHtml}
-                    </tbody>
-                </table>
+      <div class="divider"></div>
 
-                <div class="divider"></div>
-                <div style="font-size: 10px;">
-                    <span class="label">Notes:</span> ${pass.notes || '-'}
-                </div>
+      <h3 style="text-align:center; margin:10px 0;">${pass.type === 'outward' ? 'OUTWARD' : 'INWARD'} GATE PASS</h3>
 
-                <div class="signatures">
-                    <div class="sig-block">Issued By</div>
-                    <div class="sig-block">Receiver</div>
-                </div>
+      <div class="row"><b>Pass No</b><span>${pass.passNumber}</span></div>
+      <div class="row"><b>Date</b><span>${dayjs(pass.createdAt).format('DD/MM/YYYY HH:mm')}</span></div>
 
-                <div class="footer">
-                    <p>Thank you for your business</p>
-                    <p>Powered by MilkERP</p>
-                </div>
-                <script>
-                    window.onload = function() { window.print(); }
-                </script>
-            </body>
-            </html>
-        `;
+      <div class="divider"></div>
+
+      <div class="row"><b>Vehicle</b><span>${vehicleNo}</span></div>
+      <div class="row"><b>Driver</b><span>${driverName}</span></div>
+      <div class="row"><b>Phone</b><span>${driverPhone}</span></div>
+
+      <div class="divider"></div>
+
+      <div><b>Orders:</b> ${ordersText}</div>
+
+      <table style="margin-top:5px;">
+        <thead>
+          <tr>
+            <th>Asset</th>
+            <th style="text-align:right">Qty</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${itemsHtml}
+        </tbody>
+      </table>
+
+      <div class="divider"></div>
+
+      <div><b>Notes:</b> ${pass.notes || '-'}</div>
+
+      <br/>
+      <div style="display:flex;justify-content:space-between;margin-top:40px">
+        <div>Issued By</div>
+        <div>Received By</div>
+      </div>
+      
+      <div style="text-align:center; font-size:10px; margin-top:20px;">
+        Powered by MilkERP
+      </div>
+
+      <script>
+        window.onload = () => window.print();
+      </script>
+    </body>
+  </html>
+  `;
 
         printWindow.document.write(html);
         printWindow.document.close();
     };
+
 
     const columns = [
         {
@@ -354,6 +579,18 @@ const GatePass = () => {
             render: (_, record) => (
                 <div>
                     <div><span style={{ fontWeight: 'bold' }}>{record.passNumber}</span></div>
+                    <div style={{ fontSize: '11px', color: '#666' }}>
+                        {record.orders && record.orders.length > 0 ? (
+                            <span>Orders: {record.orders.map(o => o.orderNumber).join(', ')}</span>
+                        ) : (
+                            <span>{record.order?.orderNumber}</span>
+                        )}
+                        {record.referenceGatePass && (
+                            <div style={{ color: '#1890ff' }}>
+                                Ref: {record.referenceGatePass.passNumber || record.referenceGatePass}
+                            </div>
+                        )}
+                    </div>
                     <div style={{ fontSize: '12px', color: '#888' }}>
                         {dayjs(record.createdAt).format('DD MMM, HH:mm')}
                     </div>
@@ -365,8 +602,11 @@ const GatePass = () => {
             key: 'transport',
             render: (_, record) => (
                 <div>
-                    <div><span style={{ fontWeight: '500' }}>{record.vehicle || 'No Vehicle'}</span></div>
-                    <div style={{ fontSize: '12px' }}>{record.driverName} {record.driverPhone && `(${record.driverPhone})`}</div>
+                    <div><span style={{ fontWeight: '500' }}>{record.vehicle?.vehicleNumber || record.vehicle || 'No Vehicle'}</span></div>
+                    <div style={{ fontSize: '12px' }}>
+                        {record.driver?.name || record.driverName || 'No Driver'}
+                        {(record.driver?.phone || record.driverPhone) && ` (${record.driver?.phone || record.driverPhone})`}
+                    </div>
                 </div>
             )
         },
@@ -404,7 +644,36 @@ const GatePass = () => {
                     <Button
                         size="small"
                         icon={<EditOutlined />}
-                        onClick={() => showEditModal(record)}
+                        onClick={() => {
+                            setEditingPass(record);
+
+                            // Merge existing orders into the dropdown options so IDs resolve
+                            if (record.orders && record.orders.length > 0) {
+                                setOrders(prev => {
+                                    const existingIds = new Set(prev.map(o => o._id));
+                                    const newOrders = record.orders.filter(o => !existingIds.has(o._id));
+                                    return [...prev, ...newOrders];
+                                });
+                            }
+                            // Also handle single order field legacy
+                            else if (record.order) {
+                                setOrders(prev => {
+                                    if (prev.find(o => o._id === record.order._id)) return prev;
+                                    return [...prev, record.order];
+                                });
+                            }
+
+                            setModalVisible(true);
+                            // Pre-fill form (handle populated fields by passing IDs)
+                            form.setFieldsValue({
+                                ...record,
+                                items: record.type === 'outward'
+                                    ? (record.items || []).map(i => ({ orderId: i.order?._id || i.order, ...i }))
+                                    : (record.assets || []).map(a => ({ assetId: a.asset?._id || a.asset, quantity: a.quantity })),
+                                vehicle: record.vehicle?._id || record.vehicle,
+                                driver: record.driver?._id || record.driver
+                            });
+                        }}
                         title="Edit Pass"
                     />
                     <Popconfirm
@@ -425,6 +694,63 @@ const GatePass = () => {
             )
         }
     ];
+
+
+
+    // Helper to calculate total packages from an order
+    const calculateOrderPackages = (order) => {
+        if (!order || !order.items) return { totalPackages: 0, breakdown: '', rawBreakdown: {} };
+
+        let totalPackages = 0;
+        const rawBreakdown = {};
+
+        order.items.forEach(item => {
+            const product = item.product;
+            const quantity = item.quantity || 0;
+
+            if (product && product.packaging && ['crate', 'carton', 'bag', 'box', 'can', 'bottle'].includes(product.packaging.type)) {
+                // Determine pack count logic (similar to handleSubmit logic)
+                let packCount = quantity;
+                const parsedUnit = parseFloat(product.unit);
+                const isOrderInPacks = !isNaN(parsedUnit) && parsedUnit > 1;
+
+                if (!isOrderInPacks) {
+                    const packSize = product.packaging.size?.value || 1;
+                    if (packSize > 1) {
+                        packCount = Math.ceil(quantity / packSize);
+                    }
+                }
+
+                totalPackages += packCount;
+                const type = product.packaging.type;
+                rawBreakdown[type] = (rawBreakdown[type] || 0) + packCount;
+            }
+        });
+
+        const breakdownText = Object.entries(rawBreakdown)
+            .map(([type, count]) => `${count} ${type}(s)`)
+            .join(', ');
+
+        return { totalPackages, breakdown: breakdownText, rawBreakdown };
+    };
+
+    const handleOrderSelectInItem = (orderId, fieldKey) => {
+        const order = orders.find(o => o._id === orderId);
+        if (order) {
+            const { totalPackages, breakdown } = calculateOrderPackages(order);
+
+            // We need to update the form fields for this item row
+            const items = form.getFieldValue('items');
+            Object.assign(items[fieldKey], {
+                packageType: breakdown || 'Standard',
+                quantity: totalPackages,
+                notes: `Order #${order.orderNumber}`
+            });
+            form.setFieldsValue({ items });
+        }
+    };
+
+
 
     return (
         <div>
@@ -469,98 +795,180 @@ const GatePass = () => {
                     layout="vertical"
                     onFinish={handleSubmit}
                 >
-                    <Row gutter={16}>
-                        <Col span={8}>
-                            <Form.Item
-                                name="vehicle"
-                                label="Vehicle Number"
-                            >
-                                <Select
-                                    placeholder="Select Vehicle"
-                                    showSearch
-                                    optionFilterProp="children"
-                                    onChange={handleVehicleChange}
-                                >
-                                    {vehicles.map(v => (
-                                        <Option key={v._id} value={v.vehicleNumber}>
-                                            {v.vehicleNumber} ({v.vehicleType})
-                                        </Option>
-                                    ))}
-                                </Select>
-                            </Form.Item>
-                        </Col>
-                        <Col span={8}>
-                            <Form.Item
-                                name="driverName"
-                                label="Driver Name"
-                            >
-                                <Select
-                                    placeholder="Select Driver"
-                                    showSearch
-                                    optionFilterProp="children"
-                                    onChange={handleDriverChange}
-                                >
-                                    {drivers.map(d => (
-                                        <Option key={d._id} value={d.name}>
-                                            {d.name}
-                                        </Option>
-                                    ))}
-                                </Select>
-                            </Form.Item>
-                        </Col>
-                        <Col span={8}>
-                            <Form.Item
-                                name="driverPhone"
-                                label="Driver Phone"
-                            >
-                                <Input placeholder="Phone Number" />
-                            </Form.Item>
-                        </Col>
-                    </Row>
-
-                    <Form.Item
-                        name="notes"
-                        label="Notes / Reference"
-                    >
-                        <Input placeholder="Additional notes, Dealer Name, etc." />
+                    {/* Hidden field for reference pass ID */}
+                    <Form.Item name="referenceGatePass" hidden>
+                        <Input />
                     </Form.Item>
 
-                    <Form.List name="items">
+                    {/* Inward: Select Outward Pass (Moved to Top) */}
+                    {activeTab === 'inward' && (
+                        <div style={{ marginBottom: 24, padding: 16, border: '1px solid #d9d9d9', borderRadius: 8, background: '#e6f7ff' }}>
+                            <div style={{ marginBottom: 8, fontWeight: 500 }}>Select Outward Gate Pass to Return</div>
+                            <div style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
+                                Selecting a pass will auto-fill Vehicle, Driver, and Pending Items.
+                            </div>
+                            <Select
+                                placeholder="Select Outward Pass"
+                                style={{ width: '100%' }}
+                                allowClear
+                                onChange={handleOutwardPassChange}
+                            >
+                                {activeOutwardPasses.map(op => (
+                                    <Option key={op._id} value={op._id}>
+                                        {op.passNumber} - {op.vehicle?.vehicleNumber || 'No Vehicle'} ({dayjs(op.createdAt).format('DD MMM')})
+                                    </Option>
+                                ))}
+                            </Select>
+                        </div>
+                    )}
+
+                    {/* Vehicle & Driver Details (Visible for BOTH Outward and Inward) */}
+                    <div style={{ background: '#f5f5f5', padding: '16px', borderRadius: '8px', marginBottom: '24px' }}>
+                        <div style={{ marginBottom: 16, fontWeight: 'bold', color: '#555' }}>Transport Details</div>
+                        <Row gutter={16}>
+                            <Col span={8}>
+                                <Form.Item
+                                    name="vehicle"
+                                    label="Vehicle Number"
+                                    rules={[{ required: true, message: 'Please select vehicle' }]}
+                                >
+                                    <Select
+                                        placeholder="Select Vehicle"
+                                        showSearch
+                                        optionFilterProp="children"
+                                        onChange={handleVehicleChange}
+                                    >
+                                        {vehicles.map(v => (
+                                            <Option key={v._id} value={v._id}>
+                                                {v.vehicleNumber} ({v.vehicleType})
+                                            </Option>
+                                        ))}
+                                    </Select>
+                                </Form.Item>
+                            </Col>
+                            <Col span={8}>
+                                <Form.Item
+                                    name="driver"
+                                    label="Driver Name"
+                                    rules={[{ required: true, message: 'Please select driver' }]}
+                                >
+                                    <Select
+                                        placeholder="Select Driver"
+                                        showSearch
+                                        optionFilterProp="children"
+                                        onChange={handleDriverChange}
+                                    >
+                                        {drivers.map(d => (
+                                            <Option key={d._id} value={d._id}>
+                                                {d.name} {d.phone ? `(${d.phone})` : ''}
+                                            </Option>
+                                        ))}
+                                    </Select>
+                                </Form.Item>
+                            </Col>
+                            <Col span={8}>
+                                {/* Phone is now derived from driver selection, shown for reference */}
+                                <Form.Item
+                                    name="driverPhone"
+                                    label="Driver Phone"
+                                >
+                                    <Input readOnly placeholder="Auto-filled" />
+                                </Form.Item>
+                            </Col>
+                        </Row>
+                    </div>
+
+                    {activeTab === 'outward' ? <Divider orientation="left">Order Manifest</Divider> : <Divider orientation="left">Return Items</Divider>}
+
+                    <Form.List name="items"
+                        InitialValue={[]}
+                    >
                         {(fields, { add, remove }) => (
                             <>
+
+
                                 {fields.map(({ key, name, ...restField }) => (
-                                    <Space key={key} style={{ display: 'flex', marginBottom: 8 }} align="baseline">
-                                        <Form.Item
-                                            {...restField}
-                                            name={[name, 'assetId']}
-                                            rules={[{ required: true, message: 'Missing asset' }]}
-                                        >
-                                            <Select placeholder="Select Asset" style={{ width: 250 }}>
-                                                {assets.map(a => (
-                                                    <Option key={a._id} value={a._id} disabled={activeTab === 'outward' && a.availableQuantity <= 0}>
-                                                        {a.name} (Avail: {a.availableQuantity})
-                                                    </Option>
-                                                ))}
-                                            </Select>
-                                        </Form.Item>
+                                    <div key={key} style={{ display: 'flex', marginBottom: 8, border: '1px solid #eee', padding: '10px', borderRadius: '4px', alignItems: 'center' }}>
+                                        {activeTab === 'outward' ? (
+                                            <>
+                                                <Form.Item
+                                                    {...restField}
+                                                    name={[name, 'orderId']}
+                                                    label="Select Order"
+                                                    style={{ width: 300, marginBottom: 0, marginRight: 10 }}
+                                                    rules={[{ required: true, message: 'Missing order' }]}
+                                                >
+                                                    <Select
+                                                        placeholder="Select Order"
+                                                        onChange={(val) => handleOrderSelectInItem(val, name)}
+                                                        showSearch
+                                                        optionFilterProp="children"
+                                                    >
+                                                        {orders.map(o => (
+                                                            <Option key={o._id} value={o._id}>
+                                                                {o.orderNumber} ({o.status})
+                                                            </Option>
+                                                        ))}
+                                                    </Select>
+                                                </Form.Item>
+                                                <Form.Item
+                                                    {...restField}
+                                                    name={[name, 'packageType']}
+                                                    label="Package Details"
+                                                    style={{ width: 200, marginBottom: 0, marginRight: 10 }}
+                                                >
+                                                    <Input readOnly placeholder="e.g. 5 Crates" />
+                                                </Form.Item>
+                                            </>
+                                        ) : (
+                                            <Form.Item
+                                                {...restField}
+                                                name={[name, 'assetId']}
+                                                label="Select Asset"
+                                                style={{ width: 300, marginBottom: 0, marginRight: 10 }}
+                                                rules={[{ required: true, message: 'Missing asset' }]}
+                                            >
+                                                <Select
+                                                    placeholder="Select Asset"
+                                                    showSearch
+                                                    optionFilterProp="children"
+                                                >
+                                                    {assets.map(a => (
+                                                        <Option key={a._id} value={a._id}>
+                                                            {a.name} ({a.type})
+                                                        </Option>
+                                                    ))}
+                                                </Select>
+                                            </Form.Item>
+                                        )}
+
                                         <Form.Item
                                             {...restField}
                                             name={[name, 'quantity']}
-                                            rules={[{ required: true, message: 'Missing quantity' }]}
+                                            label="Total Qty"
+                                            style={{ width: 100, marginBottom: 0, marginRight: 10 }}
                                         >
-                                            <InputNumber min={1} placeholder="Qty" style={{ width: 100 }} />
+                                            <InputNumber min={0} placeholder="Qty" style={{ width: '100%' }} />
                                         </Form.Item>
-                                        <DeleteOutlined onClick={() => remove(name)} style={{ color: 'red', cursor: 'pointer' }} />
-                                    </Space>
+                                        <DeleteOutlined onClick={() => remove(name)} style={{ color: 'red', cursor: 'pointer', marginLeft: 'auto' }} />
+                                    </div>
                                 ))}
                                 <Form.Item>
                                     <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
-                                        Add Asset Item
+                                        Add Order to Manifest
                                     </Button>
                                 </Form.Item>
                             </>
                         )}
                     </Form.List>
+
+                    <Form.Item
+                        name="notes"
+                        label="Trip Notes"
+                        style={{ marginTop: 16 }}
+                    >
+                        <Input.TextArea rows={2} placeholder="Any additional instructions..." />
+                    </Form.Item>
 
                     <Form.Item style={{ textAlign: 'right', marginTop: 16 }}>
                         <Button onClick={() => setModalVisible(false)} style={{ marginRight: 8 }}>

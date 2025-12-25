@@ -111,21 +111,14 @@ const Layout = () => {
         label: 'Fleet Maintenance',
       },
       {
-        key: 'assets-management',
+        key: '/assets',
         icon: <InboxOutlined />,
-        label: 'Asset Management',
-        children: [
-          {
-            key: '/assets',
-            icon: <InboxOutlined />,
-            label: 'Assets',
-          },
-          {
-            key: '/gate-passes',
-            icon: <FileTextOutlined />,
-            label: 'Gate Passes',
-          },
-        ]
+        label: 'Assets',
+      },
+      {
+        key: '/gate-passes',
+        icon: <FileTextOutlined />,
+        label: 'Gate Passes',
       },
       {
         key: '/users',

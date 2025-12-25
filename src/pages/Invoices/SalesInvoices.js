@@ -12,18 +12,44 @@ import {
     Row,
     Col,
     Descriptions,
-    Divider
+    Divider,
+    Select,
+    InputNumber,
+    DatePicker,
+    Form,
+    Popconfirm,
+    Tabs,
+    Radio,
+    Empty,
+    Spin,
+    Statistic,
+    Badge,
+    Alert,
 } from 'antd';
 import {
     PrinterOutlined,
     EyeOutlined,
-    SearchOutlined
+    SearchOutlined,
+    PlusOutlined,
+    DeleteOutlined,
+    EditOutlined,
+    MinusCircleOutlined,
+    CalculatorOutlined,
 } from '@ant-design/icons';
-import { invoicesAPI, dealersAPI } from '../../services/api'; // Added dealersAPI
+import { invoicesAPI, dealersAPI, ordersAPI, customersAPI, dealerGroupsAPI, productsAPI } from '../../services/api';
 import dayjs from 'dayjs';
 import { useReactToPrint } from 'react-to-print';
 
 const { Title, Text } = Typography;
+const { Option } = Select;
+const { TextArea } = Input;
+const { TabPane } = Tabs;
+
+// Theme Constants
+const THEME_BLUE = '#00AEEF';
+const TEXT_DARK = '#333';
+const TEXT_MUTED = '#666';
+const BORDER_COLOR = '#E0E0E0';
 
 // Enhanced Helper for Totals: Litres, Kg, and Package Breakdown
 const calculateInvoiceDetails = (items) => {
@@ -304,7 +330,7 @@ const InvoiceDetails = React.forwardRef(({ invoice, mode }, ref) => {
                                     <div style={{ color: '#999', fontSize: '9px', fontStyle: 'italic' }}>{item.product?.description}</div>
                                 </td>
                                 <td>{item.product?.hsnCode || '-'}</td>
-                                <td style={{ textAlign: 'right' }}>{item.quantity} {item.unit}</td>
+                                <td style={{ textAlign: 'right' }}>{item.quantity} {isNaN(Number(item.unit)) ? item.unit : ''}</td>
                                 <td style={{ textAlign: 'right' }}>{item.unitPrice.toFixed(2)}</td>
                                 <td style={{ textAlign: 'right' }}>
                                     <div>{taxLabel}</div>
@@ -349,7 +375,7 @@ const InvoiceDetails = React.forwardRef(({ invoice, mode }, ref) => {
                         })}
                         <tr>
                             <td style={{ fontSize: '9px', fontWeight: 'bold', padding: '4px' }}>Total</td>
-                            <td style={{ fontSize: '9px', fontWeight: 'bold', textAlign: 'right', padding: '4px' }}>{totalTaxable.toFixed(2)}</td>
+                            <td style={{ fontSize: '9px', fontWeight: 'bold', textAlign: 'right', padding: '4px' }}>{typeof totalTaxable === 'number' ? totalTaxable.toFixed(2) : '0.00'}</td>
                             <td style={{ fontSize: '9px', fontWeight: 'bold', textAlign: 'right', padding: '4px' }} colSpan={3}></td>
                             <td style={{ fontSize: '9px', fontWeight: 'bold', textAlign: 'right', padding: '4px' }}>{invoice.pricing.taxAmount.toFixed(2)}</td>
                         </tr>
@@ -410,12 +436,12 @@ const InvoiceDetails = React.forwardRef(({ invoice, mode }, ref) => {
                             </div>
                         </div>
                     )}
-                    {invoice.pricing.customAdjustment && Number(invoice.pricing.customAdjustment.amount) !== 0 && (
+                    {invoice.pricing.customAdjustment && !isNaN(Number(invoice.pricing.customAdjustment.amount)) && Number(invoice.pricing.customAdjustment.amount) !== 0 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: '11px' }}>
                             <div style={{ color: '#666' }}>{invoice.pricing.customAdjustment.name || invoice.pricing.customAdjustment.text || "Adjustment"}</div>
                             <div style={{ fontWeight: 'bold' }}>
                                 {invoice.pricing.customAdjustment.operation === 'add' ? '+' : '-'}
-                                {Number(invoice.pricing.customAdjustment.amount).toFixed(2)}
+                                {Math.abs(Number(invoice.pricing.customAdjustment.amount)).toFixed(2)}
                             </div>
                         </div>
                     )}
@@ -436,6 +462,7 @@ const InvoiceDetails = React.forwardRef(({ invoice, mode }, ref) => {
 });
 
 const SalesInvoices = () => {
+    // --- RESTORED ORIGINAL STATE & HANDLERS ---
     const [invoices, setInvoices] = useState([]);
     const [loading, setLoading] = useState(false);
     const [viewModalVisible, setViewModalVisible] = useState(false);
@@ -446,9 +473,7 @@ const SalesInvoices = () => {
         pageSize: 10,
         total: 0,
     });
-    // Refs no longer used for printing but kept if needed for other logic, though we can remove them.
-    const standardPrintRef = useRef();
-    const thermalPrintRef = useRef();
+    const [printMode, setPrintMode] = useState('standard');
 
     useEffect(() => {
         fetchInvoices();
@@ -477,18 +502,13 @@ const SalesInvoices = () => {
         setPagination(paginationConfig);
     };
 
-    const [printMode, setPrintMode] = useState('standard');
-
     const handleView = async (invoice) => {
         let fullInvoice = { ...invoice };
-
-        // Fetch full dealer details if needed (for address)
         if (invoice.type === 'dealer' && (invoice.buyer?._id || invoice.buyer)) {
             const dealerId = invoice.buyer?._id || invoice.buyer;
             try {
                 const response = await dealersAPI.getDealer(dealerId);
                 if (response.data?.data?.dealer) {
-                    // Update buyer object with fresh dealer details
                     fullInvoice = {
                         ...fullInvoice,
                         buyer: {
@@ -497,11 +517,8 @@ const SalesInvoices = () => {
                         }
                     };
                 }
-            } catch (error) {
-                console.error('Error fetching dealer details:', error);
-            }
+            } catch (error) { }
         }
-
         setSelectedInvoice(fullInvoice);
         setViewModalVisible(true);
         setPrintMode('standard');
@@ -509,12 +526,9 @@ const SalesInvoices = () => {
 
     const handleWindowPrint = async (mode) => {
         if (!selectedInvoice) return;
-
-        // If Standard Mode, use the WYSIWYG DOM copy method (matches Orders.js)
         if (mode === 'standard') {
             const printWindow = window.open('', '_blank');
             const invoiceContent = document.getElementById('invoice-content');
-
             if (printWindow && invoiceContent) {
                 printWindow.document.write(`
                     <!DOCTYPE html>
@@ -522,61 +536,25 @@ const SalesInvoices = () => {
                     <head>
                         <title>Invoice - ${selectedInvoice.invoiceNumber}</title>
                         <style>
-                           @media print {
-                                @page { margin: 10mm; }
-                                body { -webkit-print-color-adjust: exact; }
-                           }
+                           @media print { @page { margin: 10mm; } body { -webkit-print-color-adjust: exact; } }
                            body { background: white; padding: 20px; font-family: 'Inter', sans-serif; }
                         </style>
                     </head>
-                    <body>
-                        <div id="invoice-content">${invoiceContent.innerHTML}</div>
-                    </body>
+                    <body><div id="invoice-content">${invoiceContent.innerHTML}</div></body>
                     </html>
                 `);
-
-                // Copy styles
-                Array.from(document.querySelectorAll('style')).forEach(style => {
-                    printWindow.document.head.appendChild(style.cloneNode(true));
-                });
-                Array.from(document.querySelectorAll('link[rel="stylesheet"]')).forEach(link => {
-                    printWindow.document.head.appendChild(link.cloneNode(true));
-                });
-
+                Array.from(document.querySelectorAll('style')).forEach(style => printWindow.document.head.appendChild(style.cloneNode(true)));
                 printWindow.document.close();
-
-                setTimeout(() => {
-                    printWindow.focus();
-                    printWindow.print();
-                    printWindow.close();
-                }, 500);
+                setTimeout(() => { printWindow.focus(); printWindow.print(); printWindow.close(); }, 500);
             }
             return;
         }
-
-        // THERMAL MODE: Manual HTML Construction (Legacy support for thermal printers)
-        const isThermal = true;
-        const invoice = selectedInvoice;
+        // Thermal Mode
         const printWindow = window.open('', '_blank');
-
-        if (!printWindow) {
-            message.error('Please allow popups to print');
-            return;
-        }
-
-        // Helper for address string
-        const getAddress = (addr) => {
-            if (!addr) return '';
-            return [addr.street, addr.city].filter(Boolean).join(', ');
-        };
-
-        // Reuse the helper for totals
-        const { totalLitres } = calculateInvoiceDetails(invoice.items);
-
+        if (!printWindow) { message.error('Please allow popups'); return; }
+        const invoice = selectedInvoice;
         const buyerName = invoice.buyer?.businessName || invoice.buyer?.name || 'N/A';
         const companyName = invoice.companyData?.name || 'Company Name';
-        const companyAddress = getAddress(invoice.companyData?.address);
-
         const htmlContent = `
              <!DOCTYPE html>
              <html>
@@ -593,137 +571,542 @@ const SalesInvoices = () => {
              <body>
                  <div style="text-align: center; margin-bottom: 10px;">
                      <div style="font-weight: bold; font-size: 14px;">${companyName}</div>
-                     <div style="font-size: 10px;">${companyAddress}</div>
                  </div>
                  <div style="text-align: center; margin-bottom: 10px; border-bottom: 1px dashed black;">
                      <div style="font-weight: bold;">INVOICE #${invoice.invoiceNumber}</div>
                      <div style="font-size: 10px;">${dayjs(invoice.issueDate).format('DD/MM/YY HH:mm')}</div>
                  </div>
                  <div style="font-size: 11px; margin-bottom: 5px;">To: <b>${buyerName}</b></div>
-
                  <table>
                      <thead><tr><th style="text-align:left">Item</th><th class="text-right">Qty</th><th class="text-right">Amt</th></tr></thead>
                      <tbody>
-                         ${invoice.items.map(item => `
-                             <tr>
-                                 <td>${item.name}</td>
-                                 <td class="text-right">${item.quantity}</td>
-                                 <td class="text-right">${item.total.toFixed(0)}</td>
-                             </tr>
-                         `).join('')}
+                         ${invoice.items.map(item => `<tr><td>${item.name}</td><td class="text-right">${item.quantity}</td><td class="text-right">${item.total.toFixed(0)}</td></tr>`).join('')}
                      </tbody>
                  </table>
-                 
                  <div style="margin-top: 10px; font-size: 11px;">
-                     <div style="display:flex; justify-content:space-between;"><span>Subtotal:</span><span>${invoice.pricing.subtotal.toFixed(2)}</span></div>
-                     ${invoice.pricing.discount > 0 ? `<div style="display:flex; justify-content:space-between;"><span>Disc:</span><span>-${invoice.pricing.discount.toFixed(2)}</span></div>` : ''}
-                     <div style="display:flex; justify-content:space-between;"><span>Tax:</span><span>${invoice.pricing.taxAmount.toFixed(2)}</span></div>
-                     <div style="display:flex; justify-content:space-between; font-weight:bold; border-top:1px dashed black; margin-top:2px; padding-top:2px;"><span>Total:</span><span>${invoice.pricing.total.toFixed(2)}</span></div>
+                     <div style="display:flex; justify-content:space-between;"><span>Total:</span><span>${invoice.pricing.total.toFixed(2)}</span></div>
                  </div>
-                 
                  <div style="text-align: center; margin-top: 20px; font-size: 10px;">Thank you!</div>
-                 
                  <script>window.onload = function() { window.print(); window.close(); }</script>
              </body>
              </html>
          `;
-
         printWindow.document.write(htmlContent);
         printWindow.document.close();
     };
 
     const columns = [
+        { title: 'Invoice No', dataIndex: 'invoiceNumber', key: 'invoiceNumber', render: (text) => <Text strong>{text}</Text> },
+        { title: 'Order #', dataIndex: 'order', key: 'order', width: 100, render: (order) => order ? <Text>{order.orderNumber}</Text> : <Text type="secondary">-</Text> },
+        { title: 'Customer/Dealer', key: 'buyer', render: (_, record) => <div><Text strong>{record.buyer?.businessName || record.buyer?.name}</Text><div style={{ fontSize: '12px', color: '#666' }}>{record.type === 'dealer' ? 'Dealer' : 'Customer'}</div></div> },
+        { title: 'Date', dataIndex: 'issueDate', key: 'issueDate', render: (date) => dayjs(date).format('DD MMM YYYY') },
         {
-            title: 'Invoice No',
-            dataIndex: 'invoiceNumber',
-            key: 'invoiceNumber',
-            render: (text) => <Text strong>{text}</Text>,
-        },
-        {
-            title: 'Order #',
-            dataIndex: 'order',
-            key: 'order',
-            width: 100,
-            render: (order) => order ? <Text>{order.orderNumber}</Text> : <Text type="secondary">-</Text>,
-        },
-        {
-            title: 'Customer/Dealer',
-            key: 'buyer',
+            title: 'Receipt No',
+            key: 'receipts',
+            width: 150,
             render: (_, record) => (
-                <div>
-                    <Text strong>{record.buyer?.businessName || record.buyer?.name}</Text>
-                    <div style={{ fontSize: '12px', color: '#666' }}>
-                        {record.buyer?.phone}
-                    </div>
-                    <div style={{ fontSize: '10px', color: '#888' }}>
-                        {record.type === 'dealer' ? 'Dealer' : 'Customer'}
-                    </div>
-                </div>
-            ),
-        },
-        {
-            title: 'Date',
-            dataIndex: 'issueDate',
-            key: 'issueDate',
-            render: (date) => dayjs(date).format('DD MMM YYYY'),
-        },
-        {
-            title: 'Items',
-            key: 'items',
-            render: (_, record) => (
-                <div style={{ maxHeight: '60px', overflowY: 'auto' }}>
-                    {record.items?.slice(0, 3).map((item, i) => (
-                        <div key={i} style={{ fontSize: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {item.quantity} x {item.name}
-                        </div>
-                    ))}
-                    {record.items?.length > 3 && (
-                        <div style={{ fontSize: '10px', color: '#1890ff' }}>
-                            +{record.items.length - 3} more...
-                        </div>
+                <div style={{ fontSize: '12px' }}>
+                    {record.receipts && record.receipts.length > 0 ? (
+                        record.receipts.map(r => (
+                            <Tag key={r._id} color="purple" style={{ marginRight: 0, marginBottom: 2 }}>
+                                {r.receiptNumber}
+                            </Tag>
+                        ))
+                    ) : (
+                        <Text type="secondary" style={{ fontSize: '11px' }}>-</Text>
                     )}
                 </div>
-            ),
+            )
         },
-        {
-            title: 'Amount',
-            dataIndex: 'pricing',
-            key: 'amount',
-            render: (pricing) => <Text strong>₹{pricing.total.toFixed(2)}</Text>,
-        },
-        {
-            title: 'Status',
-            dataIndex: 'status',
-            key: 'status',
-            render: (status) => {
-                const colors = { issued: 'blue', paid: 'green', cancelled: 'red', draft: 'orange' };
-                return <Tag color={colors[status]}>{status.toUpperCase()}</Tag>;
-            },
-        },
-        {
-            title: 'Actions',
-            key: 'actions',
-            render: (_, record) => (
-                <Space>
-                    <Button icon={<EyeOutlined />} onClick={() => handleView(record)}>View</Button>
-                </Space>
-            ),
-        },
+        { title: 'Amount', dataIndex: 'pricing', key: 'amount', render: (pricing) => <Text strong>₹{pricing.total.toFixed(2)}</Text> },
+        { title: 'Status', dataIndex: 'status', key: 'status', render: (status) => <Tag color={status === 'paid' ? 'green' : 'blue'}>{status?.toUpperCase()}</Tag> },
+        { title: 'Actions', key: 'actions', render: (_, record) => <Space><Button icon={<EyeOutlined />} onClick={() => handleView(record)}>View</Button></Space> }
     ];
+
+    // --- NEW STATE FOR CREATE INVOICE ---
+    const [createModalVisible, setCreateModalVisible] = useState(false);
+    const [dealers, setDealers] = useState([]);
+    const [customers, setCustomers] = useState([]);
+    const [products, setProducts] = useState([]);
+    const [dealerPricing, setDealerPricing] = useState([]);
+    const [stockAvailability, setStockAvailability] = useState({});
+
+    // Order/Invoice Creation Form State
+    const [orderType, setOrderType] = useState('customer'); // Default to customer for "one time"
+    const [selectedBuyer, setSelectedBuyer] = useState(null);
+    const [buyerBalance, setBuyerBalance] = useState(0);
+    const [orderItems, setOrderItems] = useState([]);
+    const [globalDiscount, setGlobalDiscount] = useState(0);
+    const [globalDiscountType, setGlobalDiscountType] = useState('percentage');
+    const [customAdjustment, setCustomAdjustment] = useState({ text: '', amount: 0, type: 'fixed', operation: 'subtract' });
+    const [form] = Form.useForm();
+
+    // Fetch master data when modal opens
+    useEffect(() => {
+        if (createModalVisible) {
+            fetchDealers();
+            fetchCustomers();
+            fetchProducts();
+        }
+    }, [createModalVisible]);
+
+    const fetchDealers = async () => {
+        try {
+            const response = await dealersAPI.getDealers({ limit: 100, status: 'active' });
+            setDealers(response.data.data.dealers || []);
+        } catch (error) { console.error('Error fetching dealers:', error); }
+    };
+
+    const fetchCustomers = async () => {
+        try {
+            const response = await customersAPI.getCustomers({ limit: 100 });
+            setCustomers(response.data.data.customers || []);
+        } catch (error) { console.error('Error fetching customers:', error); }
+    };
+
+    const fetchProducts = async () => {
+        try {
+            const response = await productsAPI.getProducts({ limit: 100, status: 'active' });
+            const productList = response.data.data.products || [];
+            setProducts(productList);
+
+            if (productList.length > 0) {
+                try {
+                    const stockItems = productList.map(p => ({ product: p._id, quantity: 1 }));
+                    const stockResponse = await ordersAPI.checkStock({
+                        items: stockItems,
+                        warehouse: 'Warehouse A'
+                    });
+
+                    if (stockResponse.data?.data?.stockCheck) {
+                        const stockMap = {};
+                        stockResponse.data.data.stockCheck.forEach(item => {
+                            stockMap[item.productId] = item;
+                        });
+                        setStockAvailability(stockMap);
+                    }
+                } catch (stockError) {
+                    console.error('Bulk stock check failed:', stockError);
+                }
+            }
+        } catch (error) { console.error('Error fetching products:', error); }
+    };
+
+    const fetchDealerPricing = async (dealerId) => {
+        if (!dealerId) { setDealerPricing([]); return; }
+        try {
+            const dealer = dealers.find(d => d._id === dealerId);
+            let individualPricing = [];
+            let groupPricing = [];
+            try {
+                const indResponse = await dealersAPI.getDealerPricing(dealerId);
+                individualPricing = indResponse.data.data.pricing || [];
+            } catch (err) { }
+
+            if (dealer && dealer.dealerGroup) {
+                const groupId = dealer.dealerGroup._id || dealer.dealerGroup;
+                if (groupId) {
+                    try {
+                        const groupResponse = await dealerGroupsAPI.getDealerGroupPricing(groupId);
+                        groupPricing = groupResponse.data.data.pricing || [];
+                    } catch (err) { }
+                }
+            }
+
+            const pricingMap = new Map();
+            groupPricing.forEach(p => { if (p.product?._id) pricingMap.set(p.product._id, { ...p, _priority: 'group' }); });
+            individualPricing.forEach(p => { if (p.product?._id) pricingMap.set(p.product._id, { ...p, _priority: 'individual' }); });
+            setDealerPricing(Array.from(pricingMap.values()));
+        } catch (error) { setDealerPricing([]); }
+    };
+
+    const handleOrderTypeChange = (type) => {
+        setOrderType(type);
+        setSelectedBuyer(null);
+        setBuyerBalance(0);
+        setDealerPricing([]);
+        setOrderItems([]);
+        setGlobalDiscount(0);
+    };
+
+    const handleBuyerChange = async (buyerId) => {
+        setSelectedBuyer(buyerId);
+        setOrderItems([]);
+        if (orderType === 'dealer' && buyerId) {
+            const dealer = dealers.find(d => d._id === buyerId);
+            setBuyerBalance(dealer?.financialInfo?.currentBalance || 0);
+            setGlobalDiscount(0);
+            await fetchDealerPricing(buyerId);
+        } else if (orderType === 'customer' && buyerId) {
+            const customer = customers.find(c => c._id === buyerId);
+            setBuyerBalance(customer?.financialInfo?.currentBalance || 0);
+            const customerDiscount = customer?.financialInfo?.discountPercentage || 0;
+            if (customerDiscount > 0) {
+                setGlobalDiscount(customerDiscount);
+                setGlobalDiscountType('percentage');
+                message.info(`Applied customer discount: ${customerDiscount}%`);
+            } else {
+                setGlobalDiscount(0);
+            }
+            setDealerPricing([]);
+        } else {
+            setBuyerBalance(0);
+            setGlobalDiscount(0);
+            setDealerPricing([]);
+        }
+    };
+
+    const getProductPrice = (productId) => {
+        if (orderType === 'dealer' && dealerPricing.length > 0) {
+            const pricing = dealerPricing.find(p => p.product._id === productId);
+            if (pricing) {
+                return {
+                    price: pricing.pricing.finalPrice,
+                    priceWithTax: pricing.tax.priceWithTax,
+                    taxRate: pricing.tax.totalTax,
+                    hasCustomPricing: true,
+                };
+            }
+        }
+        const product = products.find(p => p._id === productId);
+        if (product) {
+            const basePrice = product.price?.selling || 0;
+            const taxRate = product.tax?.igst || product.tax?.cgst + product.tax?.sgst || 0;
+            return {
+                price: basePrice,
+                priceWithTax: basePrice * (1 + taxRate / 100),
+                taxRate: taxRate,
+                hasCustomPricing: false,
+            };
+        }
+        return { price: 0, priceWithTax: 0, taxRate: 0, hasCustomPricing: false };
+    };
+
+    const addOrderItem = () => {
+        if (!selectedBuyer) { message.warning(`Please select a ${orderType} first`); return; }
+        const newItem = {
+            id: Date.now(),
+            productId: '',
+            productName: '',
+            quantity: 1,
+            unitPrice: 0,
+            discount: 0,
+            discountType: 'percentage',
+            igst: 0, cgst: 0, sgst: 0, taxAmount: 0, total: 0,
+        };
+        setOrderItems([...orderItems, newItem]);
+    };
+
+    const checkItemStock = async (productId, quantity) => {
+        if (!productId) return;
+        try {
+            const response = await ordersAPI.checkStock({
+                items: [{ product: productId, quantity: quantity || 1 }],
+                warehouse: 'Warehouse A'
+            });
+            const stockInfo = response.data.data.stockCheck[0];
+            setStockAvailability(prev => ({ ...prev, [productId]: stockInfo }));
+        } catch (error) { }
+    };
+
+    const updateOrderItem = (index, field, value) => {
+        const updatedItems = [...orderItems];
+        updatedItems[index] = { ...updatedItems[index], [field]: value };
+
+        if (field === 'productId' && value) {
+            const product = products.find(p => p._id === value);
+            const pricing = getProductPrice(value);
+            if (product) {
+                const igst = product.tax?.igst || 0;
+                const cgst = product.tax?.cgst || 0;
+                const sgst = product.tax?.sgst || 0;
+                updatedItems[index] = {
+                    ...updatedItems[index],
+                    productName: product.name,
+                    unitPrice: pricing.price,
+                    igst, cgst, sgst,
+                };
+                // Calculate immediately
+                const item = updatedItems[index];
+                const subtotal = (item.unitPrice || 0) * (item.quantity || 0);
+                const discountAmount = item.discountType === 'percentage' ? (subtotal * (item.discount || 0)) / 100 : (item.discount || 0);
+                const afterDiscount = subtotal - discountAmount;
+                const taxAmount = item.igst > 0 ? (afterDiscount * item.igst) / 100 : (afterDiscount * (item.cgst + item.sgst)) / 100;
+                updatedItems[index].taxAmount = taxAmount;
+                updatedItems[index].total = afterDiscount + taxAmount;
+            }
+        }
+
+        if (['quantity', 'unitPrice', 'discount', 'discountType', 'igst', 'cgst', 'sgst'].includes(field)) {
+            const item = updatedItems[index];
+            const subtotal = (item.unitPrice || 0) * (item.quantity || 0);
+            const discountAmount = item.discountType === 'percentage' ? (subtotal * (item.discount || 0)) / 100 : (item.discount || 0);
+            const afterDiscount = subtotal - discountAmount;
+            const taxAmount = item.igst > 0 ? (afterDiscount * item.igst) / 100 : (afterDiscount * (item.cgst + item.sgst)) / 100;
+            updatedItems[index].taxAmount = taxAmount;
+            updatedItems[index].total = afterDiscount + taxAmount;
+        }
+
+        if (field === 'productId' || field === 'quantity') {
+            const productId = field === 'productId' ? value : updatedItems[index].productId;
+            const quantity = field === 'quantity' ? value : updatedItems[index].quantity;
+            if (productId && quantity > 0) checkItemStock(productId, quantity);
+        }
+        setOrderItems(updatedItems);
+    };
+
+    const removeOrderItem = (index) => {
+        setOrderItems(orderItems.filter((_, i) => i !== index));
+    };
+
+    // Helper to calculate totals from a list of items (MATCHING ORDERS.JS)
+    const calculateOrderDetailsHelper = (items) => {
+        let totalLitres = 0;
+        let totalKg = 0;
+        let totalPackages = 0;
+        const packageBreakdown = {};
+
+        items.forEach(item => {
+            let product = null;
+            if (item.product && item.product.packaging) {
+                product = item.product;
+            } else if (item.productId) {
+                product = products.find(p => p._id === item.productId);
+            }
+
+            const quantity = item.quantity || 0;
+
+            if (product && product.packaging && ['crate', 'carton', 'bag', 'box'].includes(product.packaging.type)) {
+                totalPackages += quantity;
+                const type = product.packaging.type;
+                packageBreakdown[type] = (packageBreakdown[type] || 0) + quantity;
+            }
+
+            if (product?.packaging?.size?.value) {
+                let volume = parseFloat(product.packaging.size.value);
+                const unit = product.packaging.size.unit?.toLowerCase();
+                let multiplier = 1;
+
+                if (['crate', 'carton', 'bag', 'box'].includes(product.packaging.type) && product.unit) {
+                    const parsedUnit = parseFloat(product.unit);
+                    if (!isNaN(parsedUnit)) multiplier = parsedUnit;
+                }
+
+                const totalSize = volume * multiplier * quantity;
+
+                if (unit === 'ml') totalLitres += totalSize / 1000;
+                else if (['l', 'liter', 'liters'].includes(unit)) totalLitres += totalSize;
+                else if (['g', 'gram', 'grams'].includes(unit)) totalKg += totalSize / 1000;
+                else if (['kg', 'kilogram', 'kilograms'].includes(unit)) totalKg += totalSize;
+            }
+        });
+
+        return { totalLitres, totalKg, totalPackages, packageBreakdown };
+    };
+
+    const calculateOrderTotals = () => {
+        let subtotal = 0;
+        let totalDiscount = 0;
+        let totalTax = 0;
+        let totalIgst = 0;
+        let totalCgst = 0;
+        let totalSgst = 0;
+        let grandTotal = 0;
+
+        orderItems.forEach(item => {
+            const itemSubtotal = (item.unitPrice || 0) * (item.quantity || 0);
+            subtotal += itemSubtotal;
+
+            let discountAmount = 0;
+            if (item.discountType === 'percentage') {
+                discountAmount = (itemSubtotal * (item.discount || 0)) / 100;
+            } else {
+                discountAmount = item.discount || 0;
+            }
+            totalDiscount += discountAmount;
+
+            const itemTaxAmount = item.taxAmount || 0;
+            totalTax += itemTaxAmount;
+
+            if (item.igst > 0) {
+                totalIgst += itemTaxAmount;
+            } else {
+                const totalTaxRate = (item.cgst || 0) + (item.sgst || 0);
+                if (totalTaxRate > 0) {
+                    totalCgst += (itemTaxAmount * (item.cgst || 0)) / totalTaxRate;
+                    totalSgst += (itemTaxAmount * (item.sgst || 0)) / totalTaxRate;
+                }
+            }
+
+            grandTotal += (item.total || 0);
+        });
+
+        const { totalLitres, totalKg, totalPackages, packageBreakdown } = calculateOrderDetailsHelper(orderItems);
+
+        let globalDiscountAmount = 0;
+        if (globalDiscountType === 'percentage') {
+            globalDiscountAmount = (grandTotal * globalDiscount) / 100;
+        } else {
+            globalDiscountAmount = globalDiscount || 0;
+        }
+
+        let adjustmentAmount = 0;
+        const op = customAdjustment.operation || 'subtract';
+        const isAddition = op === 'add';
+
+        if (customAdjustment.amount && customAdjustment.text?.trim()) {
+            if (customAdjustment.type === 'percentage') {
+                adjustmentAmount = (grandTotal * Number(customAdjustment.amount)) / 100;
+            } else {
+                adjustmentAmount = Number(customAdjustment.amount) || 0;
+            }
+        }
+
+        let finalTotal = grandTotal - globalDiscountAmount;
+
+        if (isAddition) {
+            finalTotal = finalTotal + adjustmentAmount;
+        } else {
+            finalTotal = finalTotal - adjustmentAmount;
+        }
+
+        return {
+            subtotal,
+            totalDiscount,
+            totalTax,
+            totalIgst,
+            totalCgst,
+            totalSgst,
+            grandTotal,
+            globalDiscountAmount,
+            adjustmentAmount,
+            finalTotal,
+            itemCount: orderItems.length,
+            totalQuantity: orderItems.reduce((sum, item) => sum + (item.quantity || 0), 0),
+            totalLitres,
+            totalKg,
+            totalPackages,
+            packageBreakdown
+        };
+    };
+
+    const {
+        subtotal, totalDiscount, totalTax, totalIgst, totalCgst, totalSgst,
+        grandTotal, globalDiscountAmount, adjustmentAmount, finalTotal,
+        totalLitres, totalKg, totalPackages, packageBreakdown
+    } = calculateOrderTotals();
+
+    const handleCreateInvoice = async () => {
+        try {
+            const values = await form.validateFields();
+            if (orderItems.length === 0) { message.error('Please add at least one product'); return; }
+
+            // Recalculate totals to ensure we have the latest values for the payload
+            const totals = calculateOrderTotals();
+
+            const orderData = {
+                ...values,
+                [orderType]: selectedBuyer,
+                items: orderItems.map(item => ({
+                    product: item.productId,
+                    quantity: item.quantity,
+                    unitPrice: item.unitPrice,
+                    discount: item.discount,
+                    discountType: item.discountType,
+                    igst: item.igst,
+                    cgst: item.cgst,
+                    sgst: item.sgst,
+                    taxAmount: item.taxAmount,
+                    totalPrice: item.total
+                })),
+                payment: {
+                    method: values.paymentMethod,
+                    status: values.paymentMethod === 'credit' ? 'pending' : (values.status === 'delivered' ? 'completed' : 'pending'),
+                    paidAmount: (values.status === 'delivered' && values.paymentMethod !== 'credit') ? totals.finalTotal : 0
+                },
+                pricing: {
+                    subtotal: totals.subtotal,
+                    tax: totals.totalTax,
+                    total: totals.finalTotal, // IMPORTANT: Backend requires 'total'
+                    globalDiscount,
+                    globalDiscountType,
+                    customAdjustment
+                },
+                shipping: {
+                    method: 'pickup', // Default to pickup for direct invoices to avoid address validation
+                    address: {
+                        street: 'Counter Sale',
+                        city: 'Local',
+                        state: 'Local',
+                        zipCode: '000000',
+                        country: 'India'
+                    }
+                }
+            };
+
+            // Remove flat fields
+            delete orderData.paymentMethod;
+
+            setLoading(true);
+            // 1. Create Order
+            const orderRes = await ordersAPI.createOrder(orderData);
+            if (orderRes.data.success) {
+                const orderId = orderRes.data.data.order._id;
+                message.success('Order created, applying invoice...');
+
+                // 2. Generate Invoice
+                const invRes = await invoicesAPI.createInvoiceFromOrder(orderId);
+                if (invRes.data.success) {
+                    message.success('Invoice created successfully!');
+                    setCreateModalVisible(false);
+                    fetchInvoices();
+                    // Optionally open the view modal automatically
+                    const newInvoice = invRes.data.data.invoice;
+                    if (newInvoice) handleView(newInvoice);
+                }
+            }
+        } catch (error) {
+            console.error('Error creating invoice:', error);
+            message.error(error.response?.data?.message || 'Failed to create invoice');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const showCreateModal = () => {
+        setCreateModalVisible(true);
+        setOrderType('customer');
+        setSelectedBuyer(null);
+        setBuyerBalance(0);
+        setOrderItems([]);
+        setGlobalDiscount(0);
+        setCustomAdjustment({ text: '', amount: 0, type: 'fixed', operation: 'subtract' });
+        form.resetFields();
+    };
 
     return (
         <div>
-            <div style={{ marginBottom: 24 }}>
-                <Title level={2}>Sales Invoices</Title>
+            <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Title level={2} style={{ margin: 0 }}>Sales Invoices</Title>
+                <Button type="primary" icon={<PlusOutlined />} onClick={showCreateModal}>
+                    Create Direct Invoice
+                </Button>
             </div>
 
             <Card>
                 <div style={{ marginBottom: 16 }}>
                     <Space>
-                        <Input.Search
+                        <Input
                             placeholder="Search Invoice No / Customer"
                             allowClear
-                            onSearch={value => { setSearchText(value); setPagination(prev => ({ ...prev, current: 1 })); }}
+                            prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+                            style={{ width: 350, borderRadius: '8px' }}
+                            onChange={e => {
+                                const value = e.target.value;
+                                setSearchText(value);
+                                if (!value) setPagination(prev => ({ ...prev, current: 1 }));
+                            }}
+                            onPressEnter={() => setPagination(prev => ({ ...prev, current: 1 }))}
                         />
                     </Space>
                 </div>
@@ -737,6 +1120,311 @@ const SalesInvoices = () => {
                     onChange={handleTableChange}
                 />
             </Card>
+
+            {/* CREATE INVOICE MODAL (Full Order Form Design) */}
+            <Modal
+                title={
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginRight: 24 }}>
+                        <Space>
+                            <Text strong style={{ fontSize: 18 }}>Create Direct Invoice</Text>
+                            <Tag color="blue">New Sale</Tag>
+                        </Space>
+                        <Space>
+                            <Statistic title="Total" value={finalTotal} precision={2} prefix="₹" valueStyle={{ fontSize: 18, color: THEME_BLUE }} />
+                        </Space>
+                    </div>
+                }
+                open={createModalVisible}
+                onCancel={() => setCreateModalVisible(false)}
+                width="98%"
+                onOk={handleCreateInvoice}
+                confirmLoading={loading}
+                okText="Generate Invoice"
+                style={{ top: 10 }}
+                bodyStyle={{ padding: '24px', height: '85vh', overflowY: 'auto' }}
+            >
+                <Form form={form} layout="vertical" initialValues={{ status: 'delivered', paymentMethod: 'cash', shippingMethod: 'pickup', deliveryDate: dayjs() }}>
+                    <Row gutter={24}>
+                        {/* LEFT COLUMN: Order Details & Products */}
+                        <Col span={17}>
+                            <Card type="inner" title="Buyer & Details" size="small" style={{ marginBottom: 16 }}>
+                                <Row gutter={16}>
+                                    <Col span={8}>
+                                        <Form.Item label="Buyer Type" style={{ marginBottom: 8 }}>
+                                            <Radio.Group value={orderType} onChange={e => handleOrderTypeChange(e.target.value)} buttonStyle="solid">
+                                                <Radio.Button value="customer">Customer</Radio.Button>
+                                                <Radio.Button value="dealer">Dealer</Radio.Button>
+                                            </Radio.Group>
+                                        </Form.Item>
+                                    </Col>
+                                    <Col span={10}>
+                                        <Form.Item label={`Select ${orderType === 'dealer' ? 'Dealer' : 'Customer'}`} required style={{ marginBottom: 8 }}>
+                                            <Select
+                                                showSearch
+                                                placeholder={`Select ${orderType}`}
+                                                value={selectedBuyer}
+                                                onChange={handleBuyerChange}
+                                                style={{ width: '100%' }}
+                                                filterOption={(input, option) => {
+                                                    const item = (orderType === 'dealer' ? dealers : customers).find(i => i._id === option.key);
+                                                    if (item) {
+                                                        const name = item.businessInfo?.companyName || item.businessName || item.fullName || item.displayName || `${item.personalInfo?.firstName || ''} ${item.personalInfo?.lastName || ''}`.trim() || item.name || '';
+                                                        const phone = item.phone || item.personalInfo?.phone?.primary || '';
+                                                        return name.toLowerCase().includes(input.toLowerCase()) || phone.includes(input);
+                                                    }
+                                                    return false;
+                                                }}
+                                            >
+                                                {(orderType === 'dealer' ? dealers : customers).map(item => {
+                                                    const name = item.businessInfo?.companyName || item.businessName || item.fullName || item.displayName || `${item.personalInfo?.firstName || ''} ${item.personalInfo?.lastName || ''}`.trim() || item.name || 'Unknown';
+                                                    const phone = item.phone || item.personalInfo?.phone?.primary || '';
+                                                    return (
+                                                        <Option key={item._id} value={item._id}>
+                                                            {name} {phone ? `(${phone})` : ''}
+                                                        </Option>
+                                                    );
+                                                })}
+                                            </Select>
+                                        </Form.Item>
+                                    </Col>
+                                    <Col span={6}>
+                                        <Form.Item label="Current Balance" style={{ marginBottom: 8 }}>
+                                            <Text type={buyerBalance > 0 ? "danger" : "success"} strong>₹ {buyerBalance.toFixed(2)}</Text>
+                                        </Form.Item>
+                                    </Col>
+                                    <Col span={8}>
+                                        <Form.Item name="deliveryDate" label="Invoice Date" rules={[{ required: true }]} style={{ marginBottom: 0 }}>
+                                            <DatePicker style={{ width: '100%' }} format="DD MMM YYYY" />
+                                        </Form.Item>
+                                    </Col>
+                                    <Col span={8}>
+                                        <Form.Item name="paymentMethod" label="Payment Method" style={{ marginBottom: 0 }}>
+                                            <Select>
+                                                <Option value="cash">Cash</Option>
+                                                <Option value="bank-transfer">Bank Transfer</Option>
+                                                <Option value="digital-wallet">UPI / Digital Wallet</Option>
+                                                <Option value="cheque">Cheque</Option>
+                                                <Option value="credit">Credit / Postpay</Option>
+                                            </Select>
+                                        </Form.Item>
+                                    </Col>
+                                    <Col span={8}>
+                                        <Form.Item name="status" label="Status" style={{ marginBottom: 0 }}>
+                                            <Select>
+                                                <Option value="delivered">Delivered</Option>
+                                                <Option value="confirmed">Confirmed</Option>
+                                                <Option value="pending">Pending</Option>
+                                            </Select>
+                                        </Form.Item>
+                                    </Col>
+                                </Row>
+                            </Card>
+
+                            <Card type="inner" title="Products" size="small" bodyStyle={{ padding: 0 }}>
+                                <Table
+                                    dataSource={orderItems}
+                                    rowKey="id"
+                                    pagination={false}
+                                    size="small"
+                                    columns={[
+                                        {
+                                            title: 'Product',
+                                            dataIndex: 'productId',
+                                            width: 250,
+                                            render: (text, record, index) => (
+                                                <Select
+                                                    showSearch
+                                                    placeholder="Select Product"
+                                                    style={{ width: '100%' }}
+                                                    value={record.productId}
+                                                    onChange={(val) => updateOrderItem(index, 'productId', val)}
+                                                    optionFilterProp="children"
+                                                    dropdownMatchSelectWidth={false}
+                                                    filterOption={(input, option) => {
+                                                        const p = products.find(prod => prod._id === option.key);
+                                                        return p?.name?.toLowerCase().includes(input.toLowerCase());
+                                                    }}
+                                                >
+                                                    {products.map(p => {
+                                                        const stock = stockAvailability[p._id]?.available || 0;
+                                                        return (
+                                                            <Option key={p._id} value={p._id} disabled={stock < 1}>
+                                                                <Space>
+                                                                    <span>{p.name}</span>
+                                                                    <Tag color={stock > 10 ? 'green' : stock > 0 ? 'orange' : 'red'}>Stock: {stock}</Tag>
+                                                                </Space>
+                                                            </Option>
+                                                        );
+                                                    })}
+                                                </Select>
+                                            )
+                                        },
+                                        {
+                                            title: 'Qty',
+                                            dataIndex: 'quantity',
+                                            width: 80,
+                                            render: (text, record, index) => (
+                                                <InputNumber min={1} value={record.quantity} onChange={val => updateOrderItem(index, 'quantity', val)} style={{ width: '100%' }} />
+                                            )
+                                        },
+                                        {
+                                            title: 'Price (₹)',
+                                            dataIndex: 'unitPrice',
+                                            width: 100,
+                                            render: (text, record, index) => (
+                                                <InputNumber min={0} value={record.unitPrice} onChange={val => updateOrderItem(index, 'unitPrice', val)} style={{ width: '100%' }} />
+                                            )
+                                        },
+                                        {
+                                            title: 'Disc',
+                                            dataIndex: 'discount',
+                                            width: 110,
+                                            render: (text, record, index) => (
+                                                <Space.Compact>
+                                                    <InputNumber min={0} value={record.discount} onChange={val => updateOrderItem(index, 'discount', val)} style={{ width: 60 }} />
+                                                    <Select value={record.discountType} onChange={val => updateOrderItem(index, 'discountType', val)} style={{ width: 50 }}>
+                                                        <Option value="percentage">%</Option>
+                                                        <Option value="fixed">₹</Option>
+                                                    </Select>
+                                                </Space.Compact>
+                                            )
+                                        },
+                                        {
+                                            title: 'Tax',
+                                            width: 80,
+                                            render: (_, record) => {
+                                                const totalRate = (record.igst || 0) + (record.cgst || 0) + (record.sgst || 0);
+                                                return <Text type="secondary" style={{ fontSize: 11 }}>{totalRate}%</Text>;
+                                            }
+                                        },
+                                        {
+                                            title: 'Total',
+                                            dataIndex: 'total',
+                                            width: 100,
+                                            render: (val) => <Text strong>₹{val?.toFixed(2)}</Text>
+                                        },
+                                        {
+                                            width: 40,
+                                            render: (_, record, index) => (
+                                                <Button type="text" danger icon={<DeleteOutlined />} onClick={() => removeOrderItem(index)} size="small" />
+                                            )
+                                        }
+                                    ]}
+                                    footer={() => (
+                                        <Button type="dashed" onClick={addOrderItem} block icon={<PlusOutlined />}>
+                                            Add Product
+                                        </Button>
+                                    )}
+                                />
+                            </Card>
+                        </Col>
+
+                        {/* RIGHT COLUMN: Summary & Totals */}
+                        <Col span={7}>
+                            <Card title="Order Summary" size="small" style={{ height: '100%' }}>
+                                <div style={{ marginBottom: 16 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                                        <Text type="secondary">Subtotal ({orderItems.length} items)</Text>
+                                        <Text strong>₹ {subtotal.toFixed(2)}</Text>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                                        <Text type="secondary">Item Discounts</Text>
+                                        <Text type="success">- ₹ {totalDiscount.toFixed(2)}</Text>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                                        <Text type="secondary">Total Tax</Text>
+                                        <Text>₹ {totalTax.toFixed(2)}</Text>
+                                    </div>
+
+                                    {/* Tax Breakdown */}
+                                    <div style={{ background: '#f5f5f5', padding: '8px', borderRadius: 4, marginBottom: 12 }}>
+                                        {totalIgst > 0 && (
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                                                <Text type="secondary">IGST</Text>
+                                                <Text>₹ {totalIgst.toFixed(2)}</Text>
+                                            </div>
+                                        )}
+                                        {totalCgst > 0 && (
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                                                <Text type="secondary">CGST</Text>
+                                                <Text>₹ {totalCgst.toFixed(2)}</Text>
+                                            </div>
+                                        )}
+                                        {totalSgst > 0 && (
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                                                <Text type="secondary">SGST</Text>
+                                                <Text>₹ {totalSgst.toFixed(2)}</Text>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <Divider style={{ margin: '12px 0' }} />
+
+                                    {/* Global Discount Input */}
+                                    <div style={{ marginBottom: 12 }}>
+                                        <Text style={{ fontSize: 12 }}>Global Discount</Text>
+                                        <Space.Compact style={{ width: '100%' }}>
+                                            <InputNumber min={0} value={globalDiscount} onChange={setGlobalDiscount} style={{ flex: 1 }} />
+                                            <Select value={globalDiscountType} onChange={setGlobalDiscountType} style={{ width: 60 }}>
+                                                <Option value="percentage">%</Option>
+                                                <Option value="fixed">₹</Option>
+                                            </Select>
+                                        </Space.Compact>
+                                    </div>
+
+                                    {/* Custom Adjustment Input */}
+                                    <div style={{ marginBottom: 12 }}>
+                                        <Text style={{ fontSize: 12 }}>Adjustment / Extra Charge</Text>
+                                        <Row gutter={8}>
+                                            <Col span={24} style={{ marginBottom: 4 }}>
+                                                <Input
+                                                    placeholder="Reason (e.g. Delivery)"
+                                                    value={customAdjustment.text}
+                                                    onChange={e => setCustomAdjustment({ ...customAdjustment, text: e.target.value })}
+                                                    size="small"
+                                                />
+                                            </Col>
+                                            <Col span={24}>
+                                                <Space.Compact style={{ width: '100%' }}>
+                                                    <Select
+                                                        value={customAdjustment.operation}
+                                                        onChange={val => setCustomAdjustment({ ...customAdjustment, operation: val })}
+                                                        style={{ width: 80 }}
+                                                        size="small"
+                                                    >
+                                                        <Option value="add">Add (+)</Option>
+                                                        <Option value="subtract">Sub (-)</Option>
+                                                    </Select>
+                                                    <InputNumber
+                                                        min={0}
+                                                        value={customAdjustment.amount}
+                                                        onChange={val => setCustomAdjustment({ ...customAdjustment, amount: val })}
+                                                        style={{ flex: 1 }}
+                                                        size="small"
+                                                        placeholder="Amount"
+                                                    />
+                                                </Space.Compact>
+                                            </Col>
+                                        </Row>
+                                    </div>
+
+                                    <Divider style={{ margin: '12px 0' }} />
+
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <Text style={{ fontSize: 16 }}>Grand Total</Text>
+                                        <Title level={3} style={{ margin: 0, color: THEME_BLUE }}>
+                                            ₹ {finalTotal.toFixed(2)}
+                                        </Title>
+                                    </div>
+
+                                </div>
+                            </Card>
+                        </Col>
+                    </Row>
+                </Form>
+            </Modal>
+
+
 
             <Modal
                 title={null}

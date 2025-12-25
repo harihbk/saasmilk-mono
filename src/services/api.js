@@ -421,7 +421,8 @@ export const gatePassesAPI = {
   createGatePass: (data) => api.post('/gate-passes', data),
   updateGatePass: (id, data) => api.put(`/gate-passes/${id}`, data),
   deleteGatePass: (id) => api.delete(`/gate-passes/${id}`),
-  getPendingReturns: (params) => api.get('/gate-passes/pending-returns', { params }),
+  getPendingReturns: (params) => api.get('/gate-passes/pending-returns', { params }), // For vehicle based history
+  getOutwardActive: () => api.get('/gate-passes/outward-active'), // For dropdown
 };
 
 export const companySettingsAPI = {
