@@ -91,6 +91,13 @@ const Orders = () => {
     total: 0,
   });
 
+  const [stats, setStats] = useState({
+    totalOrders: 0,
+    totalRevenue: 0,
+    pendingOrders: 0,
+    completedOrders: 0
+  });
+
   useEffect(() => {
     fetchOrders();
     fetchDealers();
@@ -182,9 +189,12 @@ const Orders = () => {
       };
 
       const response = await ordersAPI.getOrders(params);
-      const { orders: data, pagination: paginationData } = response.data.data;
+      const { orders: data, pagination: paginationData, stats: statsData } = response.data.data;
 
       setOrders(data || []);
+      if (statsData) {
+        setStats(statsData);
+      }
       setPagination(prev => ({
         ...prev,
         total: paginationData?.total || 0,
@@ -1385,7 +1395,7 @@ const Orders = () => {
           <Card>
             <Statistic
               title="Total Orders"
-              value={orders.length}
+              value={stats.totalOrders}
               valueStyle={{ color: '#1890ff' }}
             />
           </Card>
@@ -1394,7 +1404,7 @@ const Orders = () => {
           <Card>
             <Statistic
               title="Pending Orders"
-              value={orders.filter(o => o.status === 'pending').length}
+              value={stats.pendingOrders}
               valueStyle={{ color: '#fa8c16' }}
             />
           </Card>
@@ -1403,7 +1413,7 @@ const Orders = () => {
           <Card>
             <Statistic
               title="Completed Orders"
-              value={orders.filter(o => o.status === 'completed').length}
+              value={stats.completedOrders}
               valueStyle={{ color: '#52c41a' }}
             />
           </Card>
@@ -1412,7 +1422,7 @@ const Orders = () => {
           <Card>
             <Statistic
               title="Total Revenue"
-              value={orders.reduce((sum, o) => sum + (o.pricing?.total || 0), 0)}
+              value={stats.totalRevenue}
               precision={2}
               prefix="₹"
               valueStyle={{ color: '#722ed1' }}
@@ -1431,27 +1441,35 @@ const Orders = () => {
             </div>
           </div>
           <Space>
-            <Select
-              placeholder="Filter by Status"
-              allowClear
-              value={statusFilter}
-              onChange={setStatusFilter}
-              style={{ width: 150 }}
-            >
-              <Option value="pending">Pending</Option>
-              <Option value="processing">Processing</Option>
-              <Option value="shipped">Shipped</Option>
-              <Option value="delivered">Delivered</Option>
-              <Option value="completed">Completed</Option>
-              <Option value="cancelled">Cancelled</Option>
-            </Select>
-            <Input.Search
-              placeholder="Search orders..."
-              allowClear
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              style={{ width: 200 }}
-            />
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ marginBottom: 4, fontWeight: 500 }}>Order Status</span>
+              <Select
+                placeholder="Filter by Status"
+                allowClear
+                value={statusFilter}
+                onChange={setStatusFilter}
+                style={{ width: 150 }}
+                size="large"
+              >
+                <Option value="pending">Pending</Option>
+                <Option value="processing">Processing</Option>
+                <Option value="shipped">Shipped</Option>
+                <Option value="delivered">Delivered</Option>
+                <Option value="completed">Completed</Option>
+                <Option value="cancelled">Cancelled</Option>
+              </Select>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ marginBottom: 4, fontWeight: 500 }}>Search Order</span>
+              <Input.Search
+                placeholder="Search orders..."
+                allowClear
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                style={{ width: 500 }}
+                size="large"
+              />
+            </div>
           </Space>
         </div>
 

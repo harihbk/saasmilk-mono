@@ -56,9 +56,10 @@ const Dashboard = () => {
     customers: { total: 0, active: 0, new: 0 },
     products: { total: 0, lowStock: 0 },
     inventory: { alerts: 0 },
-    dealers: { total: 0, creditBalance: 0, debitBalance: 0, negativeBalance: 0 },
+    dealers: { total: 0, creditBalance: 0, debitBalance: 0, negativeBalance: 0, outstanding: 0 },
     fleetMaintenance: { total: 0, pending: 0, overdue: 0, upcoming: 0, completionRate: 0, avgCost: 0 },
-    serviceDue: { total: 0, overdue: 0, urgent: 0, upcoming: 0 }
+    serviceDue: { total: 0, overdue: 0, urgent: 0, upcoming: 0 },
+    outstanding: { total: 0, dealer: 0, customer: 0 }
   });
   const [recentOrders, setRecentOrders] = useState([]);
   const [salesData, setSalesData] = useState([]);
@@ -102,12 +103,12 @@ const Dashboard = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      
+
       // Fetch categories and create dynamic category data
       try {
         const categoriesResponse = await categoriesAPI.getActiveCategories();
         const categories = categoriesResponse.data.data.categories || [];
-        
+
         // Create category data with colors
         const colors = ['#1890ff', '#52c41a', '#faad14', '#f5222d', '#722ed1', '#fa541c', '#13c2c2', '#eb2f96'];
         const dynamicCategoryData = categories.slice(0, 8).map((cat, index) => ({
@@ -115,15 +116,15 @@ const Dashboard = () => {
           value: Math.floor(Math.random() * 50) + 10, // Mock product count per category
           color: colors[index % colors.length]
         }));
-        
+
         setCategoryData(dynamicCategoryData.length > 0 ? dynamicCategoryData : mockCategoryData);
       } catch (error) {
         console.error('Error fetching categories:', error);
         setCategoryData(mockCategoryData);
       }
-      
+
       // Fetch all data in parallel
-      const [orderStatsRes, recentOrdersRes, customersRes, productsRes, inventoryRes, dealersRes, fleetMaintenanceStatsRes, upcomingMaintenanceRes, serviceDueRes, dealerOutstandingRes, routeOutstandingRes, dashboardRecentOrdersRes] = await Promise.allSettled([
+      const [orderStatsRes, recentOrdersRes, customersRes, productsRes, inventoryRes, dealersRes, fleetMaintenanceStatsRes, upcomingMaintenanceRes, serviceDueRes, dealerOutstandingRes, routeOutstandingRes, dashboardRecentOrdersRes, dashboardSummaryRes] = await Promise.allSettled([
         ordersAPI.getOrderStats().catch(e => ({ data: { data: { orderStats: {}, statusStats: [] } } })),
         ordersAPI.getOrders({ limit: 10, sort: '-createdAt' }).catch(e => ({ data: { data: { orders: [] } } })),
         customersAPI.getCustomers({ limit: 1000 }).catch(e => ({ data: { data: { customers: [] } } })),
@@ -135,19 +136,22 @@ const Dashboard = () => {
         fleetAPI.getServiceDue({ days: 30 }).catch(e => ({ data: { data: { vehicles: [], summary: { total: 0, overdue: 0, urgent: 0, upcoming: 0 } } } })),
         dashboardAPI.getDealerOutstanding().catch(e => ({ data: [] })),
         dashboardAPI.getRouteOutstanding().catch(e => ({ data: [] })),
-        dashboardAPI.getRecentOrders(10).catch(e => ({ data: [] }))
+        dashboardAPI.getRecentOrders(10).catch(e => ({ data: [] })),
+        dashboardAPI.getSummary().catch(e => ({ data: { data: { orders: {} } } }))
       ]);
 
       // Process order statistics from backend aggregation
       const orderStats = orderStatsRes.status === 'fulfilled' ? orderStatsRes.value.data.data.orderStats || {} : {};
+      const dashboardSummary = dashboardSummaryRes.status === 'fulfilled' ? dashboardSummaryRes.value.data.data || {} : {};
+      const summaryOrders = dashboardSummary.orders || {};
       const statusStats = orderStatsRes.status === 'fulfilled' ? orderStatsRes.value.data.data.statusStats || [] : {};
-      
+
       // Use backend calculated values for accuracy
       const totalRevenue = orderStats.totalRevenue || 0;
       const pendingOrders = orderStats.pendingOrders || 0;
       const completedOrders = orderStats.completedOrders || 0;
       const totalOrders = orderStats.totalOrders || 0;
-      
+
       // Calculate income/loss from completed orders only  
       const completedOrdersValue = statusStats
         .filter(s => ['delivered', 'completed'].includes(s._id))
@@ -155,7 +159,7 @@ const Dashboard = () => {
       const totalIncome = completedOrdersValue;
       const totalExpenses = totalIncome * 0.7; // Estimate cost as 70% of selling price
       const netProfit = totalIncome - totalExpenses;
-      
+
       // Get recent orders for display
       const recentOrdersList = recentOrdersRes.status === 'fulfilled' ? recentOrdersRes.value.data.data.orders || [] : [];
 
@@ -186,19 +190,19 @@ const Dashboard = () => {
           .filter(d => (d.financialInfo?.currentBalance || 0) > 0)
           .reduce((sum, d) => sum + (d.financialInfo?.currentBalance || 0), 0)
       };
-      
+
       const outstandingDealersList = dealers
         .filter(d => (d.financialInfo?.currentBalance || 0) > 0)  // Show dealers who owe money
         .sort((a, b) => (b.financialInfo?.currentBalance || 0) - (a.financialInfo?.currentBalance || 0))  // Highest debt first
         .slice(0, 5);
-        
+
       setNegativeDealers(outstandingDealersList);
 
       // Process fleet maintenance data
       const fleetMaintenanceStats = fleetMaintenanceStatsRes.status === 'fulfilled' ? fleetMaintenanceStatsRes.value.data.data.summary || {} : {};
       const fleetMaintenanceCosts = fleetMaintenanceStatsRes.status === 'fulfilled' ? fleetMaintenanceStatsRes.value.data.data.costs || {} : {};
       const upcomingMaintenanceData = upcomingMaintenanceRes.status === 'fulfilled' ? upcomingMaintenanceRes.value.data.data || {} : {};
-      
+
       const fleetMaintenanceData = {
         total: fleetMaintenanceStats.totalRecords || 0,
         pending: fleetMaintenanceStats.pendingRecords || 0,
@@ -237,30 +241,36 @@ const Dashboard = () => {
 
       // Set all stats
       setStats({
-        orders: { 
-          total: totalOrders, 
-          pending: pendingOrders, 
-          completed: completedOrders, 
+        orders: {
+          total: totalOrders,
+          pending: pendingOrders,
+          completed: completedOrders,
           revenue: totalRevenue,
           income: totalIncome,
           expenses: totalExpenses,
-          profit: netProfit
+          profit: netProfit,
+          totalOutstanding: orderStats.totalOutstanding || 0
         },
-        customers: { 
-          total: customers.length, 
-          active: activeCustomers, 
-          new: newCustomers 
+        customers: {
+          total: customers.length,
+          active: activeCustomers,
+          new: newCustomers
         },
-        products: { 
-          total: activeProducts, 
-          lowStock: inventoryAlerts.length 
+        products: {
+          total: activeProducts,
+          lowStock: inventoryAlerts.length
         },
-        inventory: { 
-          alerts: inventoryAlerts.length 
+        inventory: {
+          alerts: inventoryAlerts.length
         },
         dealers: dealerStats,
         fleetMaintenance: fleetMaintenanceData,
-        serviceDue: serviceDueStats
+        serviceDue: serviceDueStats,
+        outstanding: {
+          total: summaryOrders.totalOutstanding || 0,
+          dealer: summaryOrders.dealerOutstanding || 0,
+          customer: summaryOrders.customerOutstanding || 0
+        }
       });
 
       // Process new dashboard chart data
@@ -281,7 +291,7 @@ const Dashboard = () => {
           setRecentOrders(dashboardRecentOrders);
         }
       }
-      
+
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
       // Use mock data on error
@@ -346,7 +356,7 @@ const Dashboard = () => {
     },
     {
       title: 'Total',
-      key: 'total', 
+      key: 'total',
       width: 80,
       render: (_, record) => {
         const total = record.totalAmount || record.pricing?.total || 0;
@@ -506,14 +516,69 @@ const Dashboard = () => {
           <Card>
             <Statistic
               title="Outstanding Amount"
-              value={stats.dealers.outstandingAmount || 0}
+              value={stats.orders.totalOutstanding || 0}
               prefix="₹"
               precision={2}
               valueStyle={{ color: '#f5222d' }}
             />
             <div style={{ marginTop: 8 }}>
               <Text type="secondary">
-                Amount owed by dealers
+                Total pending payments
+              </Text>
+            </div>
+          </Card>
+        </Col>
+      </Row>
+
+      {/* Outstanding Breakdown */}
+      <div style={{ marginBottom: 16 }}>
+        <Title level={4}>Outstanding Overview</Title>
+      </div>
+      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+        <Col xs={24} sm={12} lg={8}>
+          <Card>
+            <Statistic
+              title="Total Outstanding"
+              value={stats.outstanding.total}
+              prefix="₹"
+              precision={2}
+              valueStyle={{ color: '#f5222d' }}
+            />
+            <div style={{ marginTop: 8 }}>
+              <Text type="secondary">
+                Total receivables (Dealers + Customers)
+              </Text>
+            </div>
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={8}>
+          <Card>
+            <Statistic
+              title="Dealer Outstanding"
+              value={stats.outstanding.dealer}
+              prefix="₹"
+              precision={2}
+              valueStyle={{ color: '#fa8c16' }}
+            />
+            <div style={{ marginTop: 8 }}>
+              <Text type="secondary">
+                Amount owed by Dealers
+              </Text>
+            </div>
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={8}>
+          <Card>
+            <Statistic
+              title="Customer Outstanding"
+              value={stats.outstanding.customer}
+              prefix="₹"
+              precision={2}
+              valueStyle={{ color: '#fa541c' }}
+            />
+            <div style={{ marginTop: 8 }}>
+              <Text type="secondary">
+                Amount owed by Customers
               </Text>
             </div>
           </Card>
@@ -802,26 +867,26 @@ const Dashboard = () => {
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={dealerOutstandingData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey="dealerName" 
+                <XAxis
+                  dataKey="dealerName"
                   angle={-45}
                   textAnchor="end"
                   height={80}
                   fontSize={12}
                 />
-                <YAxis 
+                <YAxis
                   label={{ value: 'Amount (₹)', angle: -90, position: 'insideLeft' }}
                 />
-                <Tooltip 
+                <Tooltip
                   formatter={(value, name) => [
                     `₹${value.toLocaleString()}`,
                     name === 'outstandingAmount' ? 'Outstanding' : name
                   ]}
                   labelFormatter={(label) => `Dealer: ${label}`}
                 />
-                <Bar 
-                  dataKey="outstandingAmount" 
-                  fill="#ff7300" 
+                <Bar
+                  dataKey="outstandingAmount"
+                  fill="#ff7300"
                   name="Outstanding Amount"
                   radius={[4, 4, 0, 0]}
                 />
@@ -834,26 +899,26 @@ const Dashboard = () => {
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={routeOutstandingData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey="routeName" 
+                <XAxis
+                  dataKey="routeName"
                   angle={-45}
                   textAnchor="end"
                   height={80}
                   fontSize={12}
                 />
-                <YAxis 
+                <YAxis
                   label={{ value: 'Amount (₹)', angle: -90, position: 'insideLeft' }}
                 />
-                <Tooltip 
+                <Tooltip
                   formatter={(value, name) => [
                     `₹${value.toLocaleString()}`,
                     name === 'outstandingAmount' ? 'Outstanding' : name
                   ]}
                   labelFormatter={(label) => `Route: ${label}`}
                 />
-                <Bar 
-                  dataKey="outstandingAmount" 
-                  fill="#8884d8" 
+                <Bar
+                  dataKey="outstandingAmount"
+                  fill="#8884d8"
                   name="Outstanding Amount"
                   radius={[4, 4, 0, 0]}
                 />
@@ -887,9 +952,9 @@ const Dashboard = () => {
                   <List.Item.Meta
                     avatar={
                       <Avatar
-                        style={{ 
-                          backgroundColor: maintenance.daysOverdue !== undefined ? '#f5222d' : 
-                                           maintenance.daysUntil <= 3 ? '#faad14' : '#52c41a'
+                        style={{
+                          backgroundColor: maintenance.daysOverdue !== undefined ? '#f5222d' :
+                            maintenance.daysUntil <= 3 ? '#faad14' : '#52c41a'
                         }}
                         icon={<ToolOutlined />}
                       />
@@ -940,9 +1005,9 @@ const Dashboard = () => {
                   <List.Item.Meta
                     avatar={
                       <Avatar
-                        style={{ 
-                          backgroundColor: serviceAlert.status === 'overdue' ? '#f5222d' : 
-                                           serviceAlert.status === 'urgent' ? '#faad14' : '#52c41a'
+                        style={{
+                          backgroundColor: serviceAlert.status === 'overdue' ? '#f5222d' :
+                            serviceAlert.status === 'urgent' ? '#faad14' : '#52c41a'
                         }}
                         icon={<CarOutlined />}
                       />
@@ -957,8 +1022,8 @@ const Dashboard = () => {
                           Driver: {serviceAlert.vehicle?.assignedDriver?.name || 'Unassigned'}
                         </Text>
                         <Tag color={
-                          serviceAlert.status === 'overdue' ? 'red' : 
-                          serviceAlert.status === 'urgent' ? 'orange' : 'green'
+                          serviceAlert.status === 'overdue' ? 'red' :
+                            serviceAlert.status === 'urgent' ? 'orange' : 'green'
                         }>
                           {serviceAlert.reason}
                         </Tag>

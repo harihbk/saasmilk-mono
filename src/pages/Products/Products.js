@@ -638,7 +638,8 @@ const Products = () => {
                   placeholder="Search products..."
                   allowClear
                   onSearch={handleSearch}
-                  style={{ width: 300 }}
+                  style={{ width: 500 }}
+                  size="large"
                 />
                 <Select
                   placeholder="Category"

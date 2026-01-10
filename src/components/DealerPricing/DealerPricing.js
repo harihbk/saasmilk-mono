@@ -93,6 +93,7 @@ const DealerPricing = ({ dealerId, dealerName }) => {
                 'pricing.sellingPrice': pricingItem.pricing.sellingPrice,
                 'pricing.discountType': pricingItem.pricing.discountType,
                 'pricing.discountValue': pricingItem.pricing.discountValue,
+                'taxMethod': pricingItem.taxMethod || 'exclusive',
                 'tax.igst': pricingItem.tax.igst,
                 'tax.cgst': pricingItem.tax.cgst,
                 'tax.sgst': pricingItem.tax.sgst,
@@ -105,6 +106,7 @@ const DealerPricing = ({ dealerId, dealerName }) => {
             form.resetFields();
             form.setFieldsValue({
                 'pricing.discountType': 'percentage',
+                'taxMethod': 'exclusive',
                 minOrderQuantity: 1,
             });
         }
@@ -142,6 +144,9 @@ const DealerPricing = ({ dealerId, dealerName }) => {
                     updates['tax.cgst'] = selectedProduct.tax.cgst || selectedProduct.tax.gst || 0;
                     updates['tax.sgst'] = selectedProduct.tax.sgst || selectedProduct.tax.gst || 0;
                 }
+
+                // Inherit tax method from product if available, else default to exclusive
+                updates['taxMethod'] = selectedProduct.taxMethod || 'exclusive';
             }
 
             // Auto-populate minimum order quantity (default to 1 if not available)
@@ -165,18 +170,39 @@ const DealerPricing = ({ dealerId, dealerName }) => {
 
     const handleSubmit = async (values) => {
         try {
+            // Helper to extract values whether flat or nested
+            const getVal = (path) => {
+                // First try direct access (flat)
+                if (values[path] !== undefined) return values[path];
+                // Then try nested access
+                const nested = path.split('.').reduce((obj, key) => (obj && obj[key] !== undefined) ? obj[key] : undefined, values);
+                if (nested !== undefined) return nested;
+                // Fallback to form.getFieldValue (most reliable)
+                return form.getFieldValue(path);
+            };
+
+            const taxMethod = getVal('taxMethod') || 'exclusive';
+            const basePrice = getVal('pricing.basePrice');
+            const sellingPrice = getVal('pricing.sellingPrice');
+            const discountType = getVal('pricing.discountType');
+            const discountValue = getVal('pricing.discountValue');
+            const igst = getVal('tax.igst');
+            const cgst = getVal('tax.cgst');
+            const sgst = getVal('tax.sgst');
+
             const pricingData = {
                 product: values.product,
                 pricing: {
-                    basePrice: values['pricing.basePrice'],
-                    sellingPrice: values['pricing.sellingPrice'],
-                    discountType: values['pricing.discountType'],
-                    discountValue: values['pricing.discountValue'] || 0,
+                    basePrice: basePrice,
+                    sellingPrice: sellingPrice,
+                    discountType: discountType,
+                    discountValue: discountValue || 0,
                 },
+                taxMethod: taxMethod,
                 tax: {
-                    igst: values['tax.igst'] || 0,
-                    cgst: values['tax.cgst'] || 0,
-                    sgst: values['tax.sgst'] || 0,
+                    igst: igst || 0,
+                    cgst: cgst || 0,
+                    sgst: sgst || 0,
                 },
                 minOrderQuantity: values.minOrderQuantity || 1,
                 maxOrderQuantity: values.maxOrderQuantity,
@@ -334,7 +360,10 @@ const DealerPricing = ({ dealerId, dealerName }) => {
                             </>
                         )}
                         <div style={{ fontSize: '11px', marginTop: 2 }}>
-                            Total: {totalTax}%
+                            {record.taxMethod === 'inclusive' ?
+                                <Tag color="cyan" style={{ margin: 0, fontSize: 10 }}>Inclusive</Tag> :
+                                <Tag color="orange" style={{ margin: 0, fontSize: 10 }}>Exclusive</Tag>
+                            }
                         </div>
                     </div>
                 );
@@ -345,11 +374,15 @@ const DealerPricing = ({ dealerId, dealerName }) => {
             title: 'Price with Tax',
             dataIndex: ['tax', 'priceWithTax'],
             key: 'priceWithTax',
-            render: (price) => (
-                <Text strong style={{ color: '#1890ff' }}>
-                    ₹{price?.toFixed(2)}
-                </Text>
-            ),
+            render: (price, record) => {
+                const isInclusive = record.taxMethod === 'inclusive';
+                return (
+                    <Text strong style={{ color: '#1890ff' }}>
+                        ₹{price?.toFixed(2)}
+                        {isInclusive && <span style={{ fontSize: 10, color: '#999', marginLeft: 4 }}>(Incl)</span>}
+                    </Text>
+                );
+            },
             width: 120,
         },
         {
@@ -569,6 +602,18 @@ const DealerPricing = ({ dealerId, dealerName }) => {
                     </Row>
 
                     <Row gutter={16}>
+                        <Col span={12}>
+                            <Form.Item
+                                name="taxMethod"
+                                label="Tax Method"
+                                rules={[{ required: true, message: 'Please select tax method' }]}
+                            >
+                                <Select>
+                                    <Option value="exclusive">Tax Exclusive (Price + Tax)</Option>
+                                    <Option value="inclusive">Tax Inclusive (Tax included in Price)</Option>
+                                </Select>
+                            </Form.Item>
+                        </Col>
                         <Col span={12}>
                             <Form.Item
                                 name="pricing.discountType"

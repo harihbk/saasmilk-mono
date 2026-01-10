@@ -451,6 +451,7 @@ export const receiptsAPI = {
 export const reportsAPI = {
   getCategoryWiseReport: (params) => api.get('/reports/category-wise', { params }),
   getSubCategoryWiseReport: (params) => api.get('/reports/subcategory-wise', { params }),
+  getCustomerWiseReport: (params) => api.get('/reports/customer-wise', { params }),
   getProductSalesReport: (params) => api.get('/reports/sales-by-product', { params }),
   getGstAuditReport: (params) => api.get('/reports/gst-audit', { params }),
 };

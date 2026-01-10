@@ -28,6 +28,7 @@ import DealerBalanceSheet from './pages/Reports/DealerBalanceSheet';
 import SimpleBalanceSheet from './pages/Reports/SimpleBalanceSheet';
 import CategoryReport from './pages/Reports/CategoryReport';
 import SubCategoryReport from './pages/Reports/SubCategoryReport';
+import CustomerReport from './pages/Reports/CustomerReport';
 import GstAuditReport from './pages/Reports/GstAuditReport';
 import ProductSalesReport from './pages/Reports/ProductSalesReport';
 import PaymentHistory from './pages/Reports/PaymentHistory';
@@ -135,6 +136,7 @@ function AppRoutes() {
         <Route path="reports/payment-history" element={<PaymentHistory />} />
         <Route path="reports/category-wise" element={<CategoryReport />} />
         <Route path="reports/subcategory-wise" element={<SubCategoryReport />} />
+        <Route path="reports/customer-wise" element={<CustomerReport />} />
         <Route path="reports/gst-audit" element={<GstAuditReport />} />
         <Route path="reports/product-sales" element={<ProductSalesReport />} />
         <Route path="reports/routes" element={<RouteReports />} />

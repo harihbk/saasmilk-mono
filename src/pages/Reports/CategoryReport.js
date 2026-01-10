@@ -72,7 +72,7 @@ const CategoryReport = () => {
 
             // Calculate totals from the pre-aggregated data
             const Totals = data.reduce((acc, curr) => ({
-                revenue: acc.revenue + (curr.value || 0),
+                revenue: acc.revenue + (curr.collected || 0), // Use collected (Gross) instead of value (Taxable)
                 tax: acc.tax + (curr.tax || 0),
                 discount: acc.discount + (curr.discount || 0),
                 items: acc.items + (curr.quantity || 0)
@@ -81,7 +81,7 @@ const CategoryReport = () => {
             // Add percentage to each category
             const processedData = data.map(cat => ({
                 ...cat,
-                percentage: Totals.revenue > 0 ? ((cat.value / Totals.revenue) * 100).toFixed(2) : 0
+                percentage: Totals.revenue > 0 ? ((cat.collected / Totals.revenue) * 100).toFixed(2) : 0
             }));
 
             setCategoryData(processedData);
@@ -287,7 +287,7 @@ const CategoryReport = () => {
                                             labelLine={false}
                                             outerRadius={120}
                                             fill="#8884d8"
-                                            dataKey="value"
+                                            dataKey="collected"
                                             label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
                                                 if (percent < 0.05) return null; // Don't show labels for small slices
                                                 return `${(percent * 100).toFixed(0)}%`;
@@ -318,7 +318,7 @@ const CategoryReport = () => {
                                         <XAxis type="number" />
                                         <YAxis dataKey="name" type="category" width={100} />
                                         <RechartsTooltip formatter={(value) => `₹${value.toLocaleString()}`} />
-                                        <Bar dataKey="value" fill="#8884d8">
+                                        <Bar dataKey="collected" fill="#8884d8">
                                             {categoryData.map((entry, index) => (
                                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                             ))}

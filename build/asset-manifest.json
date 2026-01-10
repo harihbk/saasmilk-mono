@@ -1,13 +1,13 @@
 {
   "files": {
-    "main.css": "/milk/static/css/main.fb0f5fe6.css",
-    "main.js": "/milk/static/js/main.b0f18e4b.js",
+    "main.css": "/milk/static/css/main.e2778ccf.css",
+    "main.js": "/milk/static/js/main.ac5a7a3d.js",
     "index.html": "/milk/index.html",
-    "main.fb0f5fe6.css.map": "/milk/static/css/main.fb0f5fe6.css.map",
-    "main.b0f18e4b.js.map": "/milk/static/js/main.b0f18e4b.js.map"
+    "main.e2778ccf.css.map": "/milk/static/css/main.e2778ccf.css.map",
+    "main.ac5a7a3d.js.map": "/milk/static/js/main.ac5a7a3d.js.map"
   },
   "entrypoints": [
-    "static/css/main.fb0f5fe6.css",
-    "static/js/main.b0f18e4b.js"
+    "static/css/main.e2778ccf.css",
+    "static/js/main.ac5a7a3d.js"
   ]
 }

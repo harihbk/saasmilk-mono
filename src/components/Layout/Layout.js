@@ -166,6 +166,11 @@ const Layout = () => {
             label: 'Subcategory Report',
           },
           {
+            key: '/reports/customer-wise',
+            icon: <TeamOutlined />,
+            label: 'Customer Report',
+          },
+          {
             key: '/reports/gst-audit',
             icon: <AccountBookOutlined />,
             label: 'GST Audit Report',
